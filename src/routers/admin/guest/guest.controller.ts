@@ -30,6 +30,7 @@ export class GuestController {
     const user = await this.userService.findTableGuestOne({
       account
     });
+    console.log("user: ", user);
     if (!!user) throw new HttpException({
       errCode: 10001, mssage: '该账号已存在，请重新输入账号'
     }, HttpStatus.OK);
@@ -45,8 +46,8 @@ export class GuestController {
       const agent_user = await this.userService.findTableGuestOne({
         _id: new Types.ObjectId(agent)
       });
-      if (!!agent_user) throw new HttpException({
-        errCode: 10002, mssage: '该代理账号不存在，请查证后重试'
+      if (!agent_user) throw new HttpException({
+        errCode: 10002, message: '该代理账号不存在，请查证后重试'
       }, HttpStatus.OK);
       params.agent = new Types.ObjectId(agent);
     }
@@ -332,23 +333,25 @@ export class GuestController {
   async guestUserSettlement(@Req() req): Promise<any> {
     const { id, money, description } = req.body;
     const washCodeInfo = await this.adminService.findGuestUserSettlementById(id);
-    console.log("washCodeInfo: ", washCodeInfo);
-    console.log("allWashCodeMoney: ", (washCodeInfo.allWashCode * washCodeInfo.ratio) / game_ratio_multiple);
-    console.log("settleWashCodeMoney: ", (washCodeInfo.settleWashCode * washCodeInfo.ratio) / game_ratio_multiple);
-    console.log("money: ", money);
-    console.log("code: ", (money / washCodeInfo.ratio))
-    console.log("code: ", (money / washCodeInfo.ratio) / game_ratio_multiple)
-    console.log("code: ", parseFloat(((money / washCodeInfo.ratio) * game_ratio_multiple).toString()))
     const settlementCode = parseFloat(((money / washCodeInfo.ratio) * game_ratio_multiple).toFixed(2));
     if (washCodeInfo.allWashCode - washCodeInfo.settleWashCode <= settlementCode)
       throw new HttpException({
-        errCode: -1, message: '超出未结算洗码费金额'
+        errCode: -1, message: '洗码费余额不足'
       }, HttpStatus.OK);
     await this.adminService.createGuestUserSettlement([{
       user: new Types.ObjectId(id),
       washCode: settlementCode,
-      washCodeMoney: parseFloat(((settlementCode * washCodeInfo.ratio) / game_ratio_multiple).toFixed(2)),
+      washCodeCost: parseFloat(((settlementCode * washCodeInfo.ratio) / game_ratio_multiple).toFixed(2)),
       description
     }])
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('/user/settlement/list')
+  async getGuestUserSettlement(@Req() req): Promise<any> {
+    let { offset, limit, where } = req.body;
+    return this.adminService.findGuestUserSettlementPage(
+      offset, limit, where
+    );
   }
 }

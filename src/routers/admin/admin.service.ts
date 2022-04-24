@@ -1233,4 +1233,52 @@ export class AdminService {
   async createGuestUserSettlement(arr): Promise<any> {
     return await this.tableGuestSettlementModel.create(arr);
   }
+
+  async findGuestUserSettlementPage(offset: number, limit: number, where?: any): Promise<any> {
+    let match: any = {};
+    if (!!where && !!where.account) {
+      const user = await this.tableGuestModel.findOne({
+        account: where.account
+      });
+      if (!user) return [];
+      match = {
+        $and: [ { account: where.account } ]
+      }
+    }
+    if (!!where && !!where.scopeTimeDate) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { createTimeDate: {
+            $gte: new Date(where.scopeTimeDate[0]),
+            $lte: new Date(where.scopeTimeDate[1])
+          }}]
+      else match.$and = [{ createTimeDate: {
+          $gte: new Date(where.scopeTimeDate[0]),
+          $lte: new Date(where.scopeTimeDate[1])
+        }}];
+    }
+    console.log("match: ", match.$and[0]);
+    return this.tableGuestSettlementModel.aggregate([
+      {
+        $lookup: {
+          from: 'table_guest',
+          localField: 'user',
+          foreignField: '_id',
+          as: 'user'
+        }
+      },
+      { $match: match },
+      { $sort: { _id: -1} },
+      { $skip: offset },
+      { $limit: limit }
+    ]).exec().then(async rs => {
+      return {
+        list: rs.map(val => {
+          val.user = val.user[0];
+          return val;
+        }),
+        total: await this.tableGuestSettlementModel.count(match),
+
+      }
+    });
+  }
 }

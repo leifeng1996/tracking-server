@@ -154,6 +154,7 @@ export class TableService {
   }
 
 
+  /** @description 计算结果 */
   calculateResult(result: any, data: any, isSanKe?: boolean) {
     let userBetMoney: number = 0;
     let validBetMoney: number = 0;
