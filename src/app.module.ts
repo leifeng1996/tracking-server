@@ -9,10 +9,11 @@ import { AdminModule } from './routers/admin/admin.module';
 
 @Module({
   imports: [
-    MongooseModule.forRoot('mongodb://localhost:37017/tracking'),
-    // MongooseModule.forRoot('mongodb://192.168.13.25:21001/tracking'),
+    // MongooseModule.forRoot('mongodb://localhost:37017/tracking'),
+    MongooseModule.forRoot('mongodb://192.168.13.25:21001/tracking'),
     AuthModule,
     UserModule,
+
     TableModule,
     AdminModule,
   ],

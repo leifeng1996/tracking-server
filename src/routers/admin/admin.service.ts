@@ -127,7 +127,11 @@ export class AdminService {
     });
   }
   async createAdminUser(arr): Promise<any> {
-    return this.adminUserModel.create(arr);
+    return this.adminUserModel.create(arr.map(val => {
+      val.createTimeDate = new Date();
+      val.modifyTimeDate = new Date();
+      return val;
+    }));
   }
   async updateAdminUser(params: any, where?: any): Promise<any> {
     return this.adminUserModel
@@ -663,7 +667,138 @@ export class AdminService {
       { $skip: offset },
       { $limit: limit }
     ]).exec().then(async rs => {
+      const statistical = await this.tableGuestModel.aggregate([...[{ $match: match}], ...pipeline,
+        {
+          $lookup: {
+            from: 'table_guest',
+            localField: '_id',
+            foreignField: 'agent',
+            pipeline: [...pipeline, {
+              $project: {
+                _id: 0, account: 0, password: 0, realName: 0, phone: 0,
+                level: 0, agent: 0, status: 0, description: 0,
+                createTimeDate: 0, modifyTimeDate: 0
+              }
+            }],
+            as: 'team'
+          }
+        }
+      ]).exec().then(rs => {
+        let values = {
+          outChip: 0, intoChip: 0, totalWinCash: 0, totalWinChip: 0,
+          totalBet: 0, validBet: 0, washCodeCost: 0, notSettleWashCode: 0,
+          washCodeBalance: 0, totalWin: 0, chip: 0, borrowing: 0, companyEarnings: 0,
+          shareEarnings: 0
+        }
+        for (let k in GAME_NAME) {
+          values[`${k}Win`] = 0;
+          values[`${k}Lose`] = 0
+          values[`${k}Water`] = 0
+        }
+        for (let i = 0; i < rs.length; ++i) {
+          let val = rs[i];
+          if (val.level === 2) {
+            val.outChip = val.outChip[0] ? val.outChip[0].value : 0;
+            const intoChip = val.intoChip[0] ? val.intoChip[0].value : 0;
+            val.intoChip = intoChip - val.outChip;
+
+            val.totalWinCash = val.totalWinCash[0] ? val.totalWinCash[0].value : 0;
+            val.totalWinChip = val.totalWinChip[0] ? val.totalWinChip[0].value : 0;
+
+            val.totalBet = val.totalBet[0] ? val.totalBet[0].value : 0;
+            val.validBet = val.validBet[0] ? val.validBet[0].value : 0;
+
+            for (let k in GAME_NAME) {
+              val[`${k}Win`] = val[`${k}Win`][0] ? val[`${k}Win`][0].value : 0;
+              val[`${k}Lose`] = val[`${k}Lose`][0] ? val[`${k}Lose`][0].value : 0;
+              val[`${k}Water`] = val[`${k}Win`] - Math.abs(val[`${k}Lose`]);
+            }
+
+            val.washCodeCost = (val.validBet * (val.ratio * game_gold_multiple) / game_ratio_multiple) / game_ratio_multiple;
+            const allWashCode = val.allWashCode[0] ? val.allWashCode[0].value : 0;
+            const settleWashCode = val.settleWashCode[0] ? val.settleWashCode[0].value : 0;
+
+            val.notSettleWashCode = parseFloat((allWashCode - settleWashCode).toFixed(2));
+            val.washCodeBalance = (val.notSettleWashCode * val.ratio);
+            val.washCodeBalance = parseFloat((val.washCodeBalance / game_ratio_multiple).toFixed(2))
+            val.totalWin = val.totalWinCash + val.totalWinChip;
+
+            val.chip = val.currency[0] ? (val.currency[0].chip || 0): 0;
+            val.borrowing = val.currency[0] ? (val.currency[0].borrowing || 0) : 0;
+
+            for (let k in values)
+              if (!isNaN(val[k]))
+                values[k] += val[k];
+          } else {
+            val.totalWinCash = 0;val.totalWinChip = 0;
+            val.totalBet = 0;val.validBet = 0;
+            val.washCodeCost = 0;val.shareEarnings = 0;
+            val.companyEarnings = 0;val.notSettleWashCode = 0;
+            val.washCodeBalance = 0;val.outChip = 0; val.intoChip = 0;
+            for (let i = 0; i < val.team.length; ++i) {
+              const info = val.team[i];
+              for (let k in info) {
+                if (k === 'ratio') continue;
+                if (i === 0) val[k] = 0;
+                if (!info[k][0] || !info[k][0].value) continue;
+                val[k] += Number(info[k][0].value);
+                if (k === 'currency') {
+                  val.chip += info.currency[0] ? (info.currency[0].chip || 0): 0;
+                  val.borrowing += info.currency[0] ? (info.currency[0].borrowing || 0) : 0;
+                }
+                if (k === 'out') {
+                  const outChip = info.outChip[0] ? info.outChip[0].value : 0;
+                  const intoChip = info.intoChip[0] ? info.intoChip[0].value : 0;
+                  val.intoChip += intoChip - outChip;
+                }
+
+                if (k === 'validBet') {
+                  let cost: number = (info[k][0].value * (info.ratio * game_gold_multiple)) / game_ratio_multiple;
+                  if (isNaN(val.washCodeCost))
+                    val.washCodeCost = cost;
+                  else
+                    val.washCodeCost += cost;
+                }
+              }
+
+              const allWashCode = info.allWashCode[0] ? info.allWashCode[0].value : 0;
+              const settleWashCode = info.settleWashCode[0] ? info.settleWashCode[0].value : 0;
+              val.notSettleWashCode += allWashCode - settleWashCode;
+              val.washCodeBalance += ((allWashCode - settleWashCode) * info.ratio) || 0;
+            }
+            val.washCodeCost = parseFloat((val.washCodeCost / game_gold_multiple).toFixed(2))
+
+            val.washCodeBalance = parseFloat((val.washCodeBalance / game_ratio_multiple).toFixed(2));
+            val.notSettleWashCode = parseFloat(val.notSettleWashCode.toFixed(2));
+
+            val.totalWin = val.totalWinCash + val.totalWinChip;
+            let earnings = Math.abs(val.totalWin * 1000) - (val.washCodeCost * 1000);
+
+            for (let k in GAME_NAME) {
+              console.log("type: ", typeof val[`${k}Win`])
+              if (typeof val[`${k}Win`] === 'object')
+                val[`${k}Win`] = 0;
+              if (typeof val[`${k}Lose`] === 'object')
+                val[`${k}Lose`] = 0;
+              val[`${k}Water`] = val[`${k}Win`] - Math.abs(val[`${k}Lose`]);
+              if (CALCULATE_RESULT_GAME.indexOf(k) !== -1) continue;
+              earnings -= val[`${k}Water`] * game_gold_multiple;
+            }
+
+            val.shareEarnings = parseFloat((((earnings * val.share) / 100) / 1000).toFixed(2));
+            val.companyEarnings = parseFloat((((earnings * (100 - val.share)) / 100) / 1000).toFixed(2));
+            if (val.totalWin > 0) {
+              val.shareEarnings = 0 - val.shareEarnings;
+              val.companyEarnings = 0 - val.companyEarnings;
+            }
+            values.shareEarnings += val.shareEarnings;
+            values.companyEarnings += val.companyEarnings;
+          }
+        }
+        return values;
+      });
       return {
+        statistical,
         total: await this.tableGuestModel.count().where(match),
         list: rs.map(val => {
           if (val.level === 2) {
@@ -1033,7 +1168,7 @@ export class AdminService {
         }
       },
       { $match: match },
-      { $sort: { _id: 1 } },
+      { $sort: { _id: -1 } },
       { $skip: offset },
       { $limit: limit }
     ]).exec().then(async rs => {
@@ -1106,7 +1241,7 @@ export class AdminService {
     }
     if (!!where && !!where.scopeTimeDate) {
       if (!!match.$and)
-        match.$and = [...match.$and, { createTimeDate: {
+        match.$and = [...match.$and, { overTimeDate: {
             $gte: new Date(where.scopeTimeDate[0]),
             $lte: new Date(where.scopeTimeDate[1])
           }}]
@@ -1115,7 +1250,7 @@ export class AdminService {
           $lte: new Date(where.scopeTimeDate[1])
         }}];
     }
-    console.log("match: ", match);
+    console.log("match: ", match.$and[0]);
     return this.tableSettlementModel.aggregate([
       {
         $lookup: {
@@ -1155,14 +1290,15 @@ export class AdminService {
         { $match: match }
       ]).exec().then(async rs => {
         console.log("rs: ", rs);
-        let obj = { bacTotalWin: 0, lhTotalWin: 0 };
+        let obj = { totalWin: 0 };
+        for (let k in GAME_NAME) obj[`${k}TotalWin`] = 0;
         for (let i = 0; i < rs.length; ++i) {
-          let totalWin: number = rs[0].totalWinChip + rs[0].totalWinCash;
-          if (rs[0].table[0].game === 'bac')
-            obj.bacTotalWin += totalWin;
-          else
-            obj.lhTotalWin += totalWin;
+          let value: number = rs[i].totalWinChip + rs[i].totalWinCash;
+          obj.totalWin += value;
+          console.log("rs[0].table[0].game: ", rs[i].table[0].game);
+          obj[`${rs[i].table[0].game}TotalWin`] += value;
         }
+        console.log("obj: ", obj);
         return obj;
       })
       return {

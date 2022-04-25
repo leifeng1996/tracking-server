@@ -137,10 +137,16 @@ export class TableController {
       if (!user) where.user = new Types.ObjectId();
       else where.user = user._id;
     }
+    console.log("time: ", {
+      createTimeDate: {
+        $gte: new Date(`${startTime}:00`),
+        $lte: new Date(`${endTime}:59`)
+      }
+    })
     where.$and = [...where.$and, {
       createTimeDate: {
         $gte: new Date(`${startTime}:00`),
-        $lte: new Date(`${endTime}:00`)
+        $lte: new Date(`${endTime}:59`)
       }
     }];
     if (noRun) where.$and = [...where.$and, { noRun }];

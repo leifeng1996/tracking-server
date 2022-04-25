@@ -5,7 +5,7 @@ import { TableUserDocument } from '../../schemas/table_user.schema';
 import { TableDocument } from '../../schemas/table.schema';
 import { TableRecordDocument } from '../../schemas/table_record';
 import { TableGuestBetting, TableGuestBettingDocument } from '../../schemas/table_guest_betting.schema';
-import { game_area_multiple, game_area_multiple_sk } from '../../constant/game.constant';
+import { game_area_multiple, game_area_multiple_sk, game_gold_multiple } from '../../constant/game.constant';
 import { TableSettlementDocument } from '../../schemas/table_settlement.schema';
 import { TableGuestDocument } from '../../schemas/table_guest.schema';
 @Injectable()
@@ -29,10 +29,23 @@ export class TableService {
       .findOne(where)
       .exec();
   }
+  async createTable(arr: any): Promise<any> {
+    return await this.tableModel.create(arr.map(val => {
+      val.createTimeDate = new Date();
+      val.modifyTimeDate = new Date();
+      return val;
+    }))
+  }
   async updateTable(params: any, where?: any): Promise<any> {
+    params.modifyTimeDate = new Date();
     return await this.tableModel
       .updateMany(params)
       .where(where || {})
+      .exec();
+  }
+  async deleteTable(ids: string[]): Promise<any> {
+    return await this.tableModel
+      .deleteMany({ _id: { $in: ids }})
       .exec();
   }
 
@@ -64,8 +77,10 @@ export class TableService {
   }
 
   async findTableBetting(where?: any): Promise<any> {
+    console.log("where: ", where);
     return await this.tableBettingModel
-      .find(where || {})
+      .find()
+      .where(where || {})
       .populate('user')
       .populate('table')
       .exec();
@@ -177,7 +192,7 @@ export class TableService {
       userBetMoney += data[k];
       if (!!result.tie && area.indexOf(k) !== -1)
         continue;
-      validBetMoney += data[k];
+      validBetMoney += data[k] >= 100 ? Math.floor(data[k] / 100) * 100 : 0;
 
       if (!!result[k]) {
         if (!!isSanKe) {
@@ -185,9 +200,11 @@ export class TableService {
           settlementMoney += money;
           settlementData[k] = money;
         } else {
-          let money: number = data[k] * game_area_multiple[k];
-          settlementMoney += money;
-          settlementData[k] = money;
+          let normal: number = (data[k] * (game_area_multiple_sk[k] * game_gold_multiple)) / game_gold_multiple;
+          let betMoney: number = data[k] >= 100 ? Math.floor(data[k] / 100) * 100 : 0;
+          let ratioMoney: number = betMoney - ((betMoney * (game_area_multiple[k] * game_gold_multiple)) / game_gold_multiple);
+          settlementMoney += betMoney < 100 ? normal : normal - ratioMoney;
+          settlementData[k] = betMoney < 100 ? normal : normal - ratioMoney;
         }
       } else {
         settlementMoney += -data[k];

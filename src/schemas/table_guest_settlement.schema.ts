@@ -8,7 +8,7 @@ export class TableGuestSettlement extends Document {
   @Prop()
   washCode: number;
   @Prop()
-  washMoney: number;
+  washCodeCost: number;
   @Prop()
   description: string;
   @Prop({ type: Date, default: new Date() })

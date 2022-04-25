@@ -4,7 +4,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { UserService } from '../../user/user.service';
 import { Types } from 'mongoose';
 import { TableService } from '../../table/table.service';
-import { GAME_CHIP_RECORD_TYPE, game_ratio_multiple } from '../../../constant/game.constant';
+import { CALCULATE_RESULT_GAME, GAME_CHIP_RECORD_TYPE, game_ratio_multiple } from '../../../constant/game.constant';
 import { Encrypt } from '../../../utils/encrypt';
 
 @Controller('guest')
@@ -78,9 +78,8 @@ export class GuestController {
   @Post('/user/delete')
   async deleteGuestUser(@Req() req): Promise<any> {
     const { ids } = req.body;
-    throw new HttpException({
-      errCode: -1, message: '此删除接口已禁用.请咨询技术部后端服务'
-    }, HttpStatus.OK);
+    await this.adminService.deleteGuestUser(ids);
+    return { message: 'ok' }
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -240,7 +239,6 @@ export class GuestController {
     if (!tableInfo) throw new HttpException({
       errCode: -1, message: '台面不存在，请查证后重试！'
     }, HttpStatus.OK);
-    console.log("tableInfo: ", tableInfo);
     const userInfo = await this.adminService.findGuestUserOne({
       account: account
     });
@@ -254,16 +252,31 @@ export class GuestController {
     if (!tableRecord) throw new HttpException({
         errCode: -1, message: `${tableInfo.game === 'bac' ? '百家乐' : '龙虎斗'} ${tableInfo.tableNum} ${noRun}靴 ${noActive}铺未开牌`
       }, HttpStatus.OK);
-    const billResult: any = {
-      ...this.tableService.calculateResult(
-        tableRecord.result, userBetData, account === 'sk'
-      ),
-      ... {
-        game: tableInfo.game, noRun, noActive, table: tableInfo._id,
-        type: isNaN(type) ? 0 : type, result: tableRecord.result,
-        user: userInfo._id, userBetData
+    let billResult: any;
+    if (CALCULATE_RESULT_GAME.indexOf(tableInfo.game) !== -1) {
+      billResult = {
+        ...this.tableService.calculateResult(
+          tableRecord.result, userBetData, account === 'sk'
+        ),
+        ... {
+          game: tableInfo.game, noRun, noActive, table: tableInfo._id,
+          type: isNaN(type) ? 0 : type, result: tableRecord.result,
+          user: userInfo._id, userBetData
+        }
+      };
+    } else {
+      let result = {};
+      let userBetData: any = {};
+      let settlementData: any = {};
+      billResult = {
+        game: tableInfo.game, noRun, noActive, table: new Types.ObjectId(tid),
+        type: isNaN(type) ? 0 : type, result,
+        user: userInfo._id, userBetData,
+        userBetMoney: 0, validBetMoney: 0, settlementData,
+        settlementMoney: userBetData.win !== 0 ? userBetData.win : 0 - userBetData.lose,
+        createTimeDate: new Date(), modifyTimeDate: new Date()
       }
-    };
+    }
     if (billResult.userBetMoney <= 0) throw new HttpException({
       errCode: -1, message: '该投注记录金额不能为0'
     }, HttpStatus.OK);
@@ -284,6 +297,7 @@ export class GuestController {
         delete userBetData[k];
       else userBetData[k] = parseInt(userBetData[k]);
     }
+
     const record = await this.adminService.findGuestBettingOne({
       _id: new Types.ObjectId(id)
     });
@@ -297,32 +311,42 @@ export class GuestController {
     if (record.account !== account)
       params.account = account;
 
-    let isUserBetDataChanged: boolean = false;
-    for (let k in record.userBetData) {
-      if (record.userBetData[k] !== userBetData[k]) {
-        isUserBetDataChanged = true;
-        break;
+    if (CALCULATE_RESULT_GAME.indexOf(record.game) !== -1) {
+      let isUserBetDataChanged: boolean = false;
+      for (let k in record.userBetData) {
+        if (record.userBetData[k] !== userBetData[k]) {
+          isUserBetDataChanged = true;
+          break;
+        }
       }
-    }
 
-    if (!!isUserBetDataChanged)
-      params.userBetData = userBetData;
+      if (!!isUserBetDataChanged)
+        params.userBetData = userBetData;
 
-    params = {...params, ...this.tableService.calculateResult(
-        result || record, userBetData, account === 'sk'
-      )};
+      params = {...params, ...this.tableService.calculateResult(
+          result || record, userBetData, account === 'sk'
+        )};
 
-    await this.tableService.updateTableBettingOne(params, {
-      _id: new Types.ObjectId(id)
-    });
-
-    if (!!result) {
-      await this.tableService.updateTableRecord({ result }, {
-        table: record.table._id, noRun: record.noRun, noActive: record.noActive
+      await this.tableService.updateTableBettingOne(params, {
+        _id: new Types.ObjectId(id)
       });
-      await this.tableService.resetTableBetting(
-        record.table._id.toString(), record.noRun, record.noActive, result
-      );
+
+      if (!!result) {
+        await this.tableService.updateTableRecord({ result }, {
+          table: record.table._id, noRun: record.noRun, noActive: record.noActive
+        });
+        await this.tableService.resetTableBetting(
+          record.table._id.toString(), record.noRun, record.noActive, result
+        );
+      }
+    } else {
+      if (userBetData.win !== 0 && userBetData.lose !== 0) throw new HttpException({
+        errCode: -1, message: '输赢只能填写任意一项'
+      }, HttpStatus.OK);
+      params.settlementMoney = userBetData.win > 0 ? userBetData.win : -userBetData.lose;
+      await this.tableService.updateTableBettingOne(params, {
+        _id: new Types.ObjectId(id)
+      });
     }
 
     return { message: 'ok' };
