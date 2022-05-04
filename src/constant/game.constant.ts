@@ -1,6 +1,9 @@
+export const game_agent_level: number = 1;
+export const game_member_level: number = 2;
 export const game_gold_multiple: number = 1000;
 export const game_ratio_multiple: number = 1000;
 export const game_share_multiple: number = 1000;
+
 export const game_area_multiple = {
   banker: 0.95,
   player: 1,
@@ -23,6 +26,9 @@ export const game_area_multiple_sk = {
 
 export enum GAME_CHIP_RECORD_TYPE {
   All,  SAVE, TAKE,OUT, INTO,
+}
+export enum GAME_MONEY_TYPE {
+  CASH, CHIP
 }
 export const GAME_NAME: any = {
   bac: '百家乐',

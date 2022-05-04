@@ -18,6 +18,14 @@ export class TableGuestBetting extends Document {
   user: Types.ObjectId;
   @Prop({ ref: () => Table })
   table: Types.ObjectId;
+  @Prop({ type: Number, default: 0 })
+  status: number;
+  @Prop()
+  createTimeDate: Date;
+  @Prop()
+  modifyTimeDate: Date;
+
+
   @Prop({ type: Object })
   result: any;
   @Prop({ type: Object })
@@ -28,14 +36,20 @@ export class TableGuestBetting extends Document {
   settlementData: any;
   @Prop()
   settlementMoney: number;
+
+  /** @description 弃用参与洗码计算 */
   @Prop()
   validBetMoney: number;
-  @Prop({ type: Number, default: 0 })
-  status: number;
+
+  /** @description 2022-04-28 新增水字段 */
   @Prop()
-  createTimeDate: Date;
+  water: number;
+  /** @description 2022-04-28 新增洗码量字段 */
   @Prop()
-  modifyTimeDate: Date;
+  washCode: number;
+  /** @description 2022-04-28 新增洗码费字段 */
+  @Prop()
+  washCodeCost: number;
 }
 export const TableGuestBettingSchema = SchemaFactory.createForClass(TableGuestBetting);
 TableGuestBettingSchema.set('collection', 'table_guest_betting');

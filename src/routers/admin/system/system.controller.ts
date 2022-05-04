@@ -19,7 +19,7 @@ export class SystemController {
       _id: new Types.ObjectId(uid)
     });
     if (!user) throw new HttpException({
-      errCode: 100001, message: '用户不存在,请查证后重试!'
+      errCode: -1, message: '用户不存在,请查证后重试!'
     }, HttpStatus.OK);
     let permission: string[] = [];
     let isSuper: boolean = user.roleDetail.findIndex(item => item.name === 'ROLE_ADMIN') !== -1;
@@ -56,7 +56,7 @@ export class SystemController {
         account
       });
     if (user) throw new HttpException({
-      errCode: 10001, message: '该账号已存在'
+      errCode: -1, message: '该账号已存在'
     }, HttpStatus.OK);
     return await this.adminService
       .createAdminUser([{
@@ -80,7 +80,7 @@ export class SystemController {
       _id: new Types.ObjectId(id)
     });
     if (!user) throw new HttpException({
-      errCode: 10001, message: '该用户不存在'
+      errCode: -1, message: '该用户不存在'
     }, HttpStatus.OK);
     let params: any = {};
     if (!isNaN(status) && user.status !== status)
@@ -121,7 +121,7 @@ export class SystemController {
       _id: new Types.ObjectId(uid)
     });
     if (!user) throw new HttpException({
-      errCode: 100001, message: '用户不存在,请查证后重试!'
+      errCode: -1, message: '用户不存在,请查证后重试!'
     }, HttpStatus.OK);
     let isSuper: boolean = user.roleDetail.findIndex(item => item.name === 'ROLE_ADMIN') !== -1;
     return isSuper ? await this.adminService.findAdminMenu() : user.menuDetail;
@@ -177,7 +177,7 @@ export class SystemController {
       _id: new Types.ObjectId(uid)
     });
     if (!user) throw new HttpException({
-      errCode: 100001, message: '用户不存在,请查证后重试!'
+      errCode: -1, message: '用户不存在,请查证后重试!'
     }, HttpStatus.OK);
     let isSuper: boolean = user.roleDetail.findIndex(item => item.name === 'ROLE_ADMIN') !== -1;
     return isSuper ? await this.adminService.findAdminPermission() : user.permissionDetail;

@@ -17,10 +17,17 @@ export class GuestController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Post('/user/list')
+  async getUserList(@Req() req): Promise<any> {
+    let { where } = req.body;
+    return await this.adminService.findGuestUser(where);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Post('/user/list/plus')
   async getUserListV1(@Req() req): Promise<any> {
     let { offset, limit, where } = req.body;
-    return await this.adminService.findGuestUserPlus(offset, limit, where);
+    return await this.adminService.findGuestUserPage(offset, limit, where);
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -83,10 +90,17 @@ export class GuestController {
   }
 
   @UseGuards(AuthGuard('jwt'))
-  @Post('borrowing')
-  async borrowing(@Req() req): Promise<any> {
+  @Post('/borrowing/list')
+  async getBorrowing(@Req() req): Promise<any> {
+    const { where } = req.body;
+    return await this.adminService.findTableGuestBorrowing(where);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('/borrowing/page')
+  async getBorrowingPage(@Req() req): Promise<any> {
     const { offset, limit, where } = req.body;
-    return await this.adminService.findTableGuestBorrowing(offset, limit, where);
+    return await this.adminService.findTableGuestBorrowingPage(offset, limit, where);
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -99,26 +113,27 @@ export class GuestController {
   @UseGuards(AuthGuard('jwt'))
   @Post('user/borrowing/out')
   async borrowingMoneyOut(@Req() req): Promise<any> {
-    const { id, money } = req.body;
+    const { id, money, description } = req.body;
     const currency: any = await this.adminService
       .findTableGuestCurrencyOne(id);
     // 防止不存在更新
     await this.adminService.updateTableGuestCurrency({
       $inc: { borrowing: money }
     }, { user: new Types.ObjectId(id) });
-    await this.adminService.createTableGuestBorrowing([{
-      user: new Types.ObjectId(id),
-      before: currency.borrowing,
-      money: money,
-      after: currency.borrowing + money
-    }])
+    // await this.adminService.createTableGuestBorrowing([{
+    //   user: new Types.ObjectId(id),
+    //   before: currency.borrowing,
+    //   money: money,
+    //   after: currency.borrowing + money,
+    //   description: description || ''
+    // }])
     return { message: 'ok' };
   }
 
   @UseGuards(AuthGuard('jwt'))
   @Post('user/borrowing/into')
   async borrowingMoneyInto(@Req() req): Promise<any> {
-    const { id, money } = req.body;
+    const { id, money, description } = req.body;
     const currency: any = await this.adminService
       .findTableGuestCurrencyOne(id);
     if (currency.borrowing <= 0) throw new HttpException({
@@ -132,7 +147,8 @@ export class GuestController {
       user: new Types.ObjectId(id),
       before: currency.borrowing,
       money: -money,
-      after: currency.borrowing - money
+      after: currency.borrowing - money,
+      description: description || ''
     }])
     return { message: 'ok' };
   }
@@ -140,18 +156,19 @@ export class GuestController {
   @UseGuards(AuthGuard('jwt'))
   @Post('user/chip/out')
   async chipOut(@Req() req): Promise<any> {
-    const { id, money } = req.body;
+    const { id, money, description } = req.body;
     await this.adminService.createTableGuestChipRecord([{
       user: new Types.ObjectId(id),
       type: GAME_CHIP_RECORD_TYPE.OUT,
       money: money,
+      description: description || ''
     }])
   }
 
   @UseGuards(AuthGuard('jwt'))
   @Post('user/chip/into')
   async chipInto(@Req() req): Promise<any> {
-    const { id, money } = req.body;
+    const { id, money, description } = req.body;
     const outMoney = await this.adminService.findChipOutMoney(id);
     if (outMoney <= 0) throw new HttpException({
       errCode: 1000002, message: '该用户并没有购买筹码'
@@ -160,13 +177,14 @@ export class GuestController {
       user: new Types.ObjectId(id),
       type: GAME_CHIP_RECORD_TYPE.INTO,
       money: money,
+      description: description || ''
     }])
   }
 
   @UseGuards(AuthGuard('jwt'))
   @Post('user/chip/save')
   async chipSave(@Req() req): Promise<any> {
-    const { id, money } = req.body;
+    const { id, money, description } = req.body;
     const currency: any = await this.adminService
       .findTableGuestCurrencyOne(id);
     // 防止不存在更新
@@ -178,7 +196,8 @@ export class GuestController {
       type: GAME_CHIP_RECORD_TYPE.SAVE,
       before: currency.chip,
       money: money,
-      after: currency.chip + money
+      after: currency.chip + money,
+      description: description || ''
     }])
     return { message: 'ok' };
   }
@@ -186,14 +205,14 @@ export class GuestController {
   @UseGuards(AuthGuard('jwt'))
   @Post('user/chip/take')
   async chipTake(@Req() req): Promise<any> {
-    const { id, money } = req.body;
-    console.log("req.body: ", req.body);
+    const { id, money, description } = req.body;
     const currency: any = await this.adminService
       .findTableGuestCurrencyOne(id);
-    console.log("currency: ", await this.adminService
-      .findTableGuestCurrencyOne(id));
     if (currency.chip <= 0) throw new HttpException({
       errCode: -1, message: '该会员没有存入筹码！'
+    }, HttpStatus.OK);
+    if (currency.chip < money) throw new HttpException({
+      errCode: -1, message: '该会员存码不足！'
     }, HttpStatus.OK);
     // 防止不存在更新
     await this.adminService.updateTableGuestCurrency({
@@ -204,14 +223,22 @@ export class GuestController {
       type: GAME_CHIP_RECORD_TYPE.TAKE,
       before: currency.chip,
       money: -money,
-      after: currency.chip - money
+      after: currency.chip - money,
+      description: description || ''
     }])
     return { message: 'ok' };
   }
 
   @UseGuards(AuthGuard('jwt'))
-  @Post('user/betting')
-  async getGuestUserBetting(@Req() req): Promise<any> {
+  @Post('user/betting/list')
+  async getGuestUserBettingList(@Req() req): Promise<any> {
+    let { where } = req.body;
+    return await this.adminService.findGuestBetting(where);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('user/betting/page')
+  async getGuestUserBettingPage(@Req() req): Promise<any> {
     let { offset, limit, where } = req.body;
     return await this.adminService.findGuestBettingPage(
       offset, limit, where
@@ -366,7 +393,7 @@ export class GuestController {
       user: new Types.ObjectId(id),
       washCode: settlementCode,
       washCodeCost: parseFloat(((settlementCode * washCodeInfo.ratio) / game_ratio_multiple).toFixed(2)),
-      description
+      description: description || ''
     }])
   }
 

@@ -12,9 +12,9 @@ export class Table extends Document {
   @Prop()
   tableNum: number;
   @Prop()
-  openCash: number;
+  initCash: number;
   @Prop()
-  openChip: number;
+  initChip: number;
   @Prop()
   middleCash: number;
   @Prop()
@@ -24,7 +24,7 @@ export class Table extends Document {
   @Prop()
   superPass: string;
   @Prop()
-  openTimeDate: Date;
+  initTimeDate: Date;
   @Prop()
   overTimeDate: Date;
   @Prop({ type: Date, default: new Date() })

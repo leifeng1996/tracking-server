@@ -176,6 +176,8 @@ export class TableService {
     let settlementData: any = {};
     let settlementMoney: number = 0;
 
+    let water: number = 0.00;
+
     const area: string[] = ['banker', 'player', 'dragon', 'tiger'];
     for (let k in data) {
       if (!data[k])
@@ -192,7 +194,8 @@ export class TableService {
       userBetMoney += data[k];
       if (!!result.tie && area.indexOf(k) !== -1)
         continue;
-      validBetMoney += data[k] >= 100 ? Math.floor(data[k] / 100) * 100 : 0;
+
+      validBetMoney += data[k];
 
       if (!!result[k]) {
         if (!!isSanKe) {
@@ -203,14 +206,16 @@ export class TableService {
           let normal: number = (data[k] * (game_area_multiple_sk[k] * game_gold_multiple)) / game_gold_multiple;
           let betMoney: number = data[k] >= 100 ? Math.floor(data[k] / 100) * 100 : 0;
           let ratioMoney: number = betMoney - ((betMoney * (game_area_multiple[k] * game_gold_multiple)) / game_gold_multiple);
-          settlementMoney += betMoney < 100 ? normal : normal - ratioMoney;
-          settlementData[k] = betMoney < 100 ? normal : normal - ratioMoney;
+          water += ratioMoney;
+          let winMoney: number = betMoney < 100 ? normal : normal - ratioMoney;
+          settlementMoney += winMoney;
+          settlementData[k] = winMoney;
         }
       } else {
         settlementMoney += -data[k];
         settlementData[k] = -data[k];
       }
     }
-    return { userBetMoney,  validBetMoney, settlementMoney, settlementData }
+    return { userBetMoney,  validBetMoney, settlementMoney, settlementData, water }
   }
 }

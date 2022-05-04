@@ -13,7 +13,9 @@ import { AdminUser, AdminUserSchema } from '../../schemas/admin_user.schema';
     MongooseModule.forFeature([
       { name: TableGuest.name, schema: TableGuestSchema },
       { name: AdminUser.name, schema: AdminUserSchema },
-      { name: TableUser.name, schema: TableUserSchema }
+      { name: TableUser.name, schema: TableUserSchema },
+
+
     ]),
     JwtModule.register({
       secret: '123456',

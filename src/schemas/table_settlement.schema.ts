@@ -7,21 +7,27 @@ export class TableSettlement extends Document {
   @Prop({ ref: () => Table })
   table: Types.ObjectId;
   @Prop()
-  openCash: number;
+  initCash: number;
   @Prop()
-  openChip: number;
+  initChip: number;
   @Prop()
   middleCash: number;
   @Prop()
   middleChip: number;
   @Prop()
+  totalWin: number;
+  @Prop()
   totalWinCash: number;
   @Prop()
   totalWinChip: number;
   @Prop()
-  openTimeDate: Date;
+  initTimeDate: Date;
   @Prop()
   overTimeDate: Date;
+  @Prop()
+  createTimeDate: Date;
+  @Prop()
+  modifyTimeDate: Date;
 }
 
 export const TableSettlementSchema = SchemaFactory.createForClass(TableSettlement);
