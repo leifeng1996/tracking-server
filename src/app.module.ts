@@ -1,10 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
-import { AuthModule } from './routers/auth/auth.module';
-import { UserModule } from './routers/user/user.module';
-import { TableModule } from './routers/table/table.module';
-import { AdminModule } from './routers/admin/admin.module';
 import { SuperController } from './super/super.controller';
 import { AdminController } from './admin/admin.controller';
 import { PassportModule } from '@nestjs/passport';
@@ -27,6 +23,7 @@ import { TableGuestCurrency, TableGuestCurrencySchema } from './schemas/table_gu
 import { TableGuestBorrowing, TableGuestBorrowingSchema } from './schemas/table_guest_borrowing.schema';
 import { TableGuestChipRecord, TableGuestChipRecordSchema } from './schemas/table_guest_chip.schema';
 import { TableGuestSettlement, TableGuestSettlementSchema } from './schemas/table_guest_settlement.schema';
+import { SuperLoginToken, SuperLoginTokenSchema } from './schemas/super_login_token';
 
 @Module({
   imports: [
@@ -45,6 +42,8 @@ import { TableGuestSettlement, TableGuestSettlementSchema } from './schemas/tabl
       { name: TableRecord.name, schema: TableRecordSchema },
       { name: TableGuestBetting.name, schema: TableGuestBettingSchema },
       { name: TableSettlement.name, schema: TableSettlementSchema },
+
+      { name: SuperLoginToken.name, schema: SuperLoginTokenSchema },
 
       { name: TableGuestCurrency.name, schema: TableGuestCurrencySchema },
       { name: TableGuestBorrowing.name, schema: TableGuestBorrowingSchema },

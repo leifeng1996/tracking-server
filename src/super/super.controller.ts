@@ -10,6 +10,7 @@ import {
   game_member_level,
   game_ratio_multiple,
 } from '../constant/game.constant';
+import { SuperJwtAuthGuard } from '../guard/super.jwt.guard';
 
 @Controller('super')
 export class SuperController {
@@ -33,20 +34,34 @@ export class SuperController {
     if (!user.table) throw new HttpException({
       errCode: -1, message: '账号未分配台面，请联系管理员！'
     }, HttpStatus.OK);
-    return {
-      access_token: this.jwtService.sign({
-        uid: user._id.toString(),
-        tid: user.table._id.toString(),
-        scope: ['super'],
+    const access_token: string = this.jwtService.sign({
+      uid: user._id.toString(),
+      tid: user.table._id.toString(),
+      scope: ['super'],
+    }, {
+      expiresIn: `${3600 * 6}s`
+    });
+    const refresh_token: string = this.jwtService.sign({
+      uid: user._id.toString(),
+    }, {
+      expiresIn: `${3600 * 24 * 30}s`
+    });
+    const existsToken = await this.appService.findSuperLoginTokenOne({
+      user: user._id
+    });
+    if (existsToken) {
+      await this.appService.updateSuperLoginToken({
+        token: access_token
       }, {
-        expiresIn: `${3600 * 6}s`
-      }),
-      refresh_token: this.jwtService.sign({
-        uid: user._id.toString(),
-      }, {
-        expiresIn: `${3600 * 24 * 30}s`
-      })
+        user: user._id
+      });
+    } else {
+      await this.appService.createSuperLoginToken([{
+        user: user._id, token: access_token
+      }]);
     }
+
+    return { access_token, refresh_token };
   }
 
   /** @description 验证超级密码 */
@@ -60,13 +75,13 @@ export class SuperController {
     });
     let passMD5 = Encrypt.md5(pass).toLocaleUpperCase();
     if (table.superPass !== passMD5) throw new HttpException({
-      errCode: -1, message: '管理员密码错误'
+      errCode: -1, message: '超级密码错误'
     }, HttpStatus.OK);
     return { message: 'ok' };
   }
 
   /** @description 获取基础信息 */
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(SuperJwtAuthGuard)
   @Post('/base/info')
   private async getBaseInfo(@Req() req): Promise<any> {
     const { tid } = req.user;
@@ -74,23 +89,24 @@ export class SuperController {
       _id: new Types.ObjectId(tid)
     });
     return {
-      table, record: await this.appService.findTableRunRecord({
-        table: table._id, noRun: table.noRun
-      }).then(rs => rs.map(val => val.result))
+      table, record: await this.appService.findTableRunRecord(null, null, {
+        game: table.game, tableNum: table.tableNum,
+        noRun: table.noRun
+      }).then(rs => (rs.list || []).map(val => val.result))
     }
   }
 
   /** @description 获取设置信息 */
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(SuperJwtAuthGuard)
   @Post('/setting/info')
   private async getSettingInfo(@Req() req): Promise<any> {
     const { tid } = req.user;
     const table = await this.appService.findTableOne({
       _id: new Types.ObjectId(tid)
     });
-    console.log("time: ", [ table.initTimeDate, new Date() ])
     const statistics = await this.appService.findGuestBettingStatistics({
-      tableNum: table.tableNum, scopeTimeDate: [ table.initTimeDate, new Date() ]
+      game: table.game, tableNum: table.tableNum,
+      scopeTimeDate: [ table.initTimeDate, new Date() ]
     });
 
     return {
@@ -104,7 +120,7 @@ export class SuperController {
   }
 
   /** @description 台面初始 */
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(SuperJwtAuthGuard)
   @Post('/init')
   private async init(@Req() req): Promise<any> {
     const { tid } = req.user;
@@ -120,7 +136,7 @@ export class SuperController {
   }
 
   /** @description 台面结算 */
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(SuperJwtAuthGuard)
   @Post('/settlement')
   private async settlement(@Req() req): Promise<any> {
     const { tid } = req.user;
@@ -128,7 +144,8 @@ export class SuperController {
       _id: new Types.ObjectId(tid)
     });
     const statistics = await this.appService.findGuestBettingStatistics({
-      tableNum: table.tableNum, scopeTimeDate: [ table.initTimeDate, new Date() ]
+      game: table.game, tableNum: table.tableNum,
+      scopeTimeDate: [ table.initTimeDate, new Date() ]
     });
     const overTimeDate = new Date();
     await this.appService.updateTable({
@@ -151,7 +168,7 @@ export class SuperController {
   }
 
   /** @description 创建新场次 */
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(SuperJwtAuthGuard)
   @Post('/create/new/run')
   private async createRun(@Req() req): Promise<any> {
     const { uid, tid } = req.user;
@@ -162,19 +179,22 @@ export class SuperController {
   }
 
   /** @description 检查客人是否存在 */
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(SuperJwtAuthGuard)
   @Post('/check/guest/user/exists')
   private async checkGuestUserExists(@Req() req): Promise<any> {
     const { account } = req.body;
-    const user = await this.appService.findGuestUserOne({ account, level: game_member_level });
+    const user = await this.appService.findGuestUserOne({
+      account: { $regex: eval(`/^${account}$/i`) },
+      level: game_member_level
+    });
     if (!user) throw new HttpException({
       errCode: -1, message: '会员不存在，请查证后重试！'
     }, HttpStatus.OK);
-    return { uid: user._id.toString() }
+    return { uid: user._id.toString(), account: user.account }
   }
 
   /** @description 获取客人投注列表 */
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(SuperJwtAuthGuard)
   @Post('/guest/user/betting/list')
   private async getGuestUserBettingList(@Req() req): Promise<any> {
     const { uid, tid } = req.user;
@@ -182,14 +202,13 @@ export class SuperController {
     const table = await this.appService.findTableOne({
       _id: new Types.ObjectId(tid)
     });
-    console.log("table: ", table);
     return await this.appService.findGuestBettingRecord(null, null, {
       ...where, ...{ game: table.game, tableNum: table.tableNum }
     });
   }
 
   /** @description 创建投注 */
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(SuperJwtAuthGuard)
   @Post('/submit/result')
   private async submitResult(@Req() req): Promise<any> {
     const { uid, tid } = req.user;
@@ -200,6 +219,15 @@ export class SuperController {
     if (!table) throw new HttpException({
       errCode: -1, message: '该台面不存在，请查证后重试！'
     }, HttpStatus.OK);
+
+    const record = await this.appService.findTableRunRecordOne({
+      table: new Types.ObjectId(tid),
+      noRun: table.noRun , noActive,
+    });
+    if (!!record) throw new HttpException({
+      errCode: -1, message: "禁止重复提交"
+    }, HttpStatus.OK);
+
     let billResult: any[] = [];
     if (CALCULATE_RESULT_GAME.indexOf(table.game) !== -1) {
       for (let i = 0; i < bills.length; ++i) {
@@ -209,6 +237,7 @@ export class SuperController {
         delete userBetData.uid;
         delete userBetData.type;
         delete userBetData.account;
+        delete userBetData.description;
 
         const user = await this.appService.findGuestUserOne({
           _id: new Types.ObjectId(val.uid), level: game_member_level
@@ -217,13 +246,18 @@ export class SuperController {
         const settleResult = this.appService.calculateResult(
           result, userBetData, val.account === 'sk'
         );
-        let washCode: number = 0;
-        if (Math.abs(settleResult.settlementMoney) >= 100)
-          washCode = Math.floor(Math.abs(settleResult.settlementMoney) / 100) * 100;
-        let washCodeCost: number = (washCode * user.ratio) / game_gold_multiple;
+        let washCode: number = settleResult.washCode;
+        let washCodeCost: number = 0;
+        if (val.account !== 'sk')
+          washCodeCost = (washCode * user.ratio) / game_gold_multiple;
 
         console.log("产生洗码量: ", washCode);
         console.log("产生洗码费: ", washCodeCost);
+
+        await this.appService.updateGuestCurrency({
+          $inc: { washCode, washCodeCost }
+        }, { user: new Types.ObjectId(val.uid) });
+
          if (settleResult.userBetMoney > 0) {
            billResult = [...billResult, {
              ...settleResult, ...{
@@ -232,6 +266,7 @@ export class SuperController {
                table: new Types.ObjectId(tid),
                type: isNaN(val.type) ? 0 : val.type, result,
                user: new Types.ObjectId(val.uid), userBetData,
+               description: val.description || "",
                createTimeDate: new Date(), modifyTimeDate: new Date()
              }}]
          }
@@ -248,14 +283,17 @@ export class SuperController {
           user: new Types.ObjectId(val.uid), userBetData,
           userBetMoney: 0, validBetMoney: 0, settlementData,
           settlementMoney: val.win !== 0 ? val.win : 0 - val.lose,
+          description: val.description || "",
           createTimeDate: new Date(), modifyTimeDate: new Date()
         }
       })
     }
-    await this.appService.createTableRunRecord([{
+
+    await this.appService.createTableRunRecordOne({
       table: new Types.ObjectId(tid),
-      noRun:table.noRun , noActive, result
-    }]);
+      noRun:table.noRun , noActive, result,
+      createTimeDate: new Date(), modifyTimeDate: new Date()
+    });
     billResult.length !== 0 &&
     await this.appService.createGuestBettingRecord(billResult);
 
@@ -263,7 +301,7 @@ export class SuperController {
   }
 
   /** @description 更新结果 */
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(SuperJwtAuthGuard)
   @Post('/modify/result')
   private async modifyResult(@Req() req): Promise<any> {
     const { uid, tid } = req.user;
@@ -282,7 +320,7 @@ export class SuperController {
   }
 
   /** @description 增加中间货币 */
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(SuperJwtAuthGuard)
   @Post('/add/middle/currency')
   private async addMiddleCurrency(@Req() req): Promise<any> {
     const { tid } = req.user;

@@ -37,7 +37,7 @@ export class TableGuestBetting extends Document {
   @Prop()
   settlementMoney: number;
 
-  /** @description 弃用参与洗码计算 */
+  /** @description 参与洗码计算 */
   @Prop()
   validBetMoney: number;
 
@@ -50,6 +50,10 @@ export class TableGuestBetting extends Document {
   /** @description 2022-04-28 新增洗码费字段 */
   @Prop()
   washCodeCost: number;
+
+  /** @description 2022-05-10 增加备注字段 */
+  @Prop()
+  description: string;
 }
 export const TableGuestBettingSchema = SchemaFactory.createForClass(TableGuestBetting);
 TableGuestBettingSchema.set('collection', 'table_guest_betting');

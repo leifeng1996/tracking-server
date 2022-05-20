@@ -9,6 +9,10 @@ export class TableGuestCurrency extends Document {
   chip: number;
   @Prop()
   borrowing: number;
+  @Prop()
+  washCode: number;
+  @Prop()
+  washCodeCost: number;
 }
 
 export const TableGuestCurrencySchema = SchemaFactory.createForClass(TableGuestCurrency);

@@ -1,4 +1,4 @@
-import { Controller, HttpException, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, HttpException, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AppService } from '../app.service';
 import { Encrypt } from '../utils/encrypt';
@@ -18,6 +18,13 @@ export class AdminController {
     private readonly jwtService: JwtService,
     private readonly appService: AppService,
   ) { }
+
+  /** @description 系统迭代数据接口 */
+  @Get('/versionUpdate')
+  private async washCodeToCurrency(): Promise<any> {
+    await this.appService.versionUpdate();
+    return { message: 'ok' }
+  }
 
   /** @description 登录后台系统 */
   @Post('/login')
@@ -324,6 +331,7 @@ export class AdminController {
     if (!!table) throw new HttpException({
       errCode: -1, message: "台面已存在"
     }, HttpStatus.OK);
+    params.superPass = Encrypt.md5(params.superPass).toLocaleUpperCase();
     return await this.appService.createTable([{
       ...params, ...{
         initCash: 0, initChip:0, middleCash: 0, middleChip: 0,
@@ -338,9 +346,11 @@ export class AdminController {
   @Post('/table/update')
   async updateTable(@Req() req): Promise<any> {
     const { id, data } = req.body;
-    if (!!data.superPass && data.superPass !== 6) throw new HttpException({
-      errCode: -1, message: "超级密码只能是六位数字"
-    }, HttpStatus.OK);
+    // if (!!data.superPass && data.superPass !== 6) throw new HttpException({
+    //   errCode: -1, message: "超级密码只能是六位数字"
+    // }, HttpStatus.OK);
+
+    data.superPass = Encrypt.md5(data.superPass).toLocaleUpperCase();
     data.modifyTimeDate = new Date();
     return await this.appService.updateTable(data, {
       _id: new Types.ObjectId(id)
@@ -418,10 +428,24 @@ export class AdminController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Post('/table/running/record')
+  async getTableRunningRecord(@Req() req): Promise<any> {
+    let { offset, limit, where } = req.body;
+    return await this.appService.findTableRunRecord(offset, limit, where);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Post('/guest/user/list')
   async getGuestUserList(@Req() req): Promise<any> {
     let { offset, limit, where } = req.body;
     return await this.appService.findGuestUser(offset, limit, where);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('/guest/user/statistics')
+  async getGuestUserStatistics(@Req() req): Promise<any> {
+    let { where } = req.body;
+    return await this.appService.findGuestUserStatistics(where);
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -620,16 +644,9 @@ export class AdminController {
   @Post('/guest/user/betting/create')
   async createGuestUserBetting(@Req() req): Promise<any> {
     const { uid, tid } = req.user;
-    let { type, table, noRun, noActive, account, userBetData } = req.body;
+    let { type, table, noRun, noActive, account, userBetData, description } = req.body;
 
-    for (let k in userBetData) {
-      if (typeof userBetData[k] === 'string' && userBetData[k].length === 0)
-        delete userBetData[k];
-      else if (isNaN(parseInt(userBetData[k])))
-        delete userBetData[k];
-      else userBetData[k] = parseInt(userBetData[k]);
-    }
-
+    console.log("userBetData: ", userBetData);
     const tableInfo = await this.appService.findTableOne({
       _id: new Types.ObjectId(table)
     });
@@ -644,6 +661,25 @@ export class AdminController {
       errCode: -1, message: '用户不存在，请查证后重试！'
     }, HttpStatus.OK);
 
+    if(tableInfo.game === 'bac' || tableInfo.game === 'lh') {
+      for (let k in userBetData) {
+        if (typeof userBetData[k] === 'string' && userBetData[k].length === 0)
+          delete userBetData[k];
+        else if (isNaN(parseInt(userBetData[k])))
+          delete userBetData[k];
+        else userBetData[k] = parseInt(userBetData[k]);
+      }
+    } else {
+      for (let k in userBetData) {
+        if (typeof userBetData[k] === 'string' && userBetData[k].length === 0)
+          userBetData[k] = 0;
+        else if (isNaN(parseInt(userBetData[k])))
+          userBetData[k] = 0;
+        else userBetData[k] = Math.abs(parseInt(userBetData[k]));
+      }
+      console.log("userBetData2: ", userBetData);
+    }
+
     const tableRecord = await this.appService.findTableRunRecordOne({
       table: tableInfo._id, noRun, noActive
     });
@@ -656,10 +692,15 @@ export class AdminController {
       const settleResult = this.appService.calculateResult(
         tableRecord.result, userBetData, account === 'sk'
       );
-      let washCode: number = 0;
-      if (Math.abs(settleResult.settlementMoney) >= 100)
-        washCode = Math.floor(Math.abs(settleResult.settlementMoney) / 100) * 100;
-      let washCodeCost: number = (washCode * user.ratio) / game_gold_multiple;
+
+      let washCode: number = settleResult.washCode;
+      let washCodeCost: number = 0;
+      if (account !== 'sk')
+        washCodeCost = (washCode * user.ratio) / game_gold_multiple;
+
+      await this.appService.updateGuestCurrency({
+        $inc: { washCode, washCodeCost }
+      }, { user: user._id });
 
       if (settleResult.userBetMoney > 0) billResult = {
         ...settleResult, ...{
@@ -670,6 +711,7 @@ export class AdminController {
           type: isNaN(type) ? 0 : type,
           result: tableRecord.result,
           user: user._id, userBetData,
+          description: description || "",
           createTimeDate: tableRecord.createTimeDate, modifyTimeDate: new Date()
         }}
     } else billResult = {
@@ -679,8 +721,9 @@ export class AdminController {
       washCode: 0, washCodeCost: 0,
       type: isNaN(type) ? 0 : type, result: {},
       user: user._id, userBetData: {},
-      userBetMoney: 0, validBetMoney: 0, settlementData: {},
-      settlementMoney: userBetData.win !== 0 ? userBetData.win : 0 - userBetData.lose,
+      userBetMoney: 0, settlementData: {},
+      settlementMoney: userBetData.win > 0 ? userBetData.win : 0 - userBetData.lose,
+      description: description || "",
       createTimeDate: tableRecord.createTimeDate, modifyTimeDate: new Date()
     }
     billResult !== null &&
@@ -691,14 +734,7 @@ export class AdminController {
   @UseGuards(AuthGuard('jwt'))
   @Post('/guest/user/betting/update')
   async updateGuestUserBetting(@Req() req): Promise<any> {
-    let { id, type, result, account, userBetData } = req.body;
-    for (let k in userBetData) {
-      if (typeof userBetData[k] === 'string' && userBetData[k].length === 0)
-        delete userBetData[k];
-      else if (isNaN(parseInt(userBetData[k])))
-        delete userBetData[k];
-      else userBetData[k] = parseInt(userBetData[k]);
-    }
+    let { id, type, result, account, userBetData, description } = req.body;
 
     const record = await this.appService.findGuestBettingRecordOne({
       _id: new Types.ObjectId(id)
@@ -714,10 +750,28 @@ export class AdminController {
       errCode: -1, message: "该用户不存在，请查证后重试！"
     }, HttpStatus.OK);
 
-    let params: any = {};
+    if(CALCULATE_RESULT_GAME.indexOf(record.game) !== -1) {
+      for (let k in userBetData) {
+        if (typeof userBetData[k] === 'string' && userBetData[k].length === 0)
+          delete userBetData[k];
+        else if (isNaN(parseInt(userBetData[k])))
+          delete userBetData[k];
+        else userBetData[k] = Math.abs(parseInt(userBetData[k]));
+      }
+    } else {
+      for (let k in userBetData) {
+        if (typeof userBetData[k] === 'string' && userBetData[k].length === 0)
+          userBetData[k] = 0;
+        else if (isNaN(parseInt(userBetData[k])))
+          userBetData[k] = 0;
+        else userBetData[k] = Math.abs(parseInt(userBetData[k]));
+      }
+    }
+
+    let params: any = { description: description || "" };
     if (record.type !== type)
       params.type = type;
-    if (record.account !== account)
+    if (record.user.account !== account)
       params.user = user._id;
 
     if (CALCULATE_RESULT_GAME.indexOf(record.game) !== -1) {
@@ -728,19 +782,30 @@ export class AdminController {
           break;
         }
       }
-
-      if (!!isUserBetDataChanged)
+      if (!!params.user || !!isUserBetDataChanged) {
         params.userBetData = userBetData;
+        const currency = await this.appService.findGuestCurrencyOne({ _id: user._id });
+        currency.washCode -= record.washCode;
+        currency.washCodeCost -= record.washCodeCost;
 
-      const settleResult = this.appService.calculateResult(
-        result, userBetData, account === 'sk'
-      );
-      let washCode: number = 0;
-      if (Math.abs(settleResult.settlementMoney) >= 100)
-        washCode = Math.floor(Math.abs(settleResult.settlementMoney) / 100) * 100;
-      let washCodeCost: number = (washCode * user.ratio) / game_gold_multiple;
+        const settleResult = this.appService.calculateResult(
+          result || record.result, userBetData, account === 'sk'
+        );
 
-      params = {...params, ...settleResult, ...{washCode, washCodeCost}};
+        let washCode: number = settleResult.washCode;
+        let washCodeCost: number = 0;
+        if (account !== 'sk')
+          washCodeCost = (washCode * user.ratio) / game_gold_multiple;
+
+        currency.washCode += washCode;
+        currency.washCodeCost += washCodeCost;
+        await this.appService.updateGuestCurrency({
+          washCode: currency.washCode,
+          washCodeCost: currency.washCodeCost,
+        }, { user: user._id });
+
+        params = {...params, ...settleResult, ...{washCode, washCodeCost}};
+      }
 
       await this.appService.updateGuestBettingRecordOne(params, {
         _id: new Types.ObjectId(id)
@@ -758,7 +823,7 @@ export class AdminController {
       if (userBetData.win !== 0 && userBetData.lose !== 0) throw new HttpException({
         errCode: -1, message: '输赢只能填写任意一项'
       }, HttpStatus.OK);
-      params.settlementMoney = userBetData.win > 0 ? userBetData.win : -userBetData.lose;
+      params.settlementMoney = userBetData.win > 0 ? userBetData.win : 0 - userBetData.lose;
       await this.appService.updateGuestBettingRecordOne(params, {
         _id: new Types.ObjectId(id)
       });
@@ -768,22 +833,54 @@ export class AdminController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Post('/guest/user/betting/delete')
+  async deleteGuestUserBetting(@Req() req): Promise<any> {
+    let { ids } = req.body;
+    await this.appService.deleteGuestBettingRecord(ids);
+    return { message: 'ok' };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Post('/guest/user/settlement')
   async guestUserSettlement(@Req() req): Promise<any> {
     const { id, money, description } = req.body;
-    const washCodeInfo = await this.appService.findGuestUserSettlementRecordOne({
-      _id: new Types.ObjectId(id)
+    if (isNaN(money)) throw new HttpException({
+      errCode: -1, message: '无效的金额'
+    }, HttpStatus.OK);
+    const user = await this.appService.findGuestUserOne({
+      _id: new Types.ObjectId(id), level: game_member_level
     });
-    if (washCodeInfo.allWashCodeCost - washCodeInfo.settleWashCodeCost < money)  throw new HttpException({
+    if (!user) throw new HttpException({
+      errCode: -1, message: '该用户不存在,请稍后重试！'
+    }, HttpStatus.OK);
+
+    const currency = await this.appService.findGuestCurrencyOne({
+      user: new Types.ObjectId(id)
+    });
+    if (currency.washCodeCost < money) throw new HttpException({
       errCode: -1, message: '洗码费余额不足'
     }, HttpStatus.OK);
-    const settlementCode = parseFloat((money / (washCodeInfo.ratio / game_ratio_multiple)).toFixed(2));
-    await this.appService.createGuestUserSettlement([{
+    const settleCode = parseFloat((money / (user.ratio / game_ratio_multiple)).toFixed(2));
+    currency.washCode -= settleCode;
+    currency.washCodeCost -= money;
+    await this.appService.updateGuestCurrency({
+      washCode: currency.washCode,
+      washCodeCost: currency.washCodeCost
+    }, { user: user._id })
+    return await this.appService.createGuestUserSettlement([{
       user: new Types.ObjectId(id),
-      washCode: settlementCode,
+      washCode: settleCode,
       washCodeCost: money,
       description: description || ''
-    }])
+    }]).then(rs => {
+      return {
+        settleCode: parseFloat(settleCode.toFixed(2)),
+        settleCodeCost: parseFloat(money.toFixed(2)),
+        notSettleCode: parseFloat(currency.washCode.toFixed(2)),
+        notSettleCodeCost: parseFloat(currency.washCodeCost.toFixed(2)),
+        settleTimeDate: rs[0].createTimeDate
+      }
+    })
   }
 
   @UseGuards(AuthGuard('jwt'))
