@@ -24,6 +24,8 @@ import { TableGuestBorrowing, TableGuestBorrowingSchema } from './schemas/table_
 import { TableGuestChipRecord, TableGuestChipRecordSchema } from './schemas/table_guest_chip.schema';
 import { TableGuestSettlement, TableGuestSettlementSchema } from './schemas/table_guest_settlement.schema';
 import { SuperLoginToken, SuperLoginTokenSchema } from './schemas/super_login_token';
+import { TableRunModifyRecord, TableRunModifyRecordSchema } from './schemas/table_running_modify_record';
+import { GuestBetModifyRecord, GuestBetModifyRecordSchema } from './schemas/guest_betting_modify_record.schema';
 
 @Module({
   imports: [
@@ -40,8 +42,11 @@ import { SuperLoginToken, SuperLoginTokenSchema } from './schemas/super_login_to
       { name: TableUser.name, schema: TableUserSchema },
       { name: TableGuest.name, schema: TableGuestSchema },
       { name: TableRecord.name, schema: TableRecordSchema },
-      { name: TableGuestBetting.name, schema: TableGuestBettingSchema },
       { name: TableSettlement.name, schema: TableSettlementSchema },
+      { name: TableGuestBetting.name, schema: TableGuestBettingSchema },
+
+      { name: TableRunModifyRecord.name, schema: TableRunModifyRecordSchema },
+      { name: GuestBetModifyRecord.name, schema: GuestBetModifyRecordSchema },
 
       { name: SuperLoginToken.name, schema: SuperLoginTokenSchema },
 

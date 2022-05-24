@@ -8,22 +8,27 @@ export type  GuestBetModifyRecordDocument = GuestBetModifyRecord & Document;
 export class GuestBetModifyRecord extends Document {
   @Prop()
   game: string;
-  @Prop()
-  type: number;
+
   @Prop()
   noRun: number;
   @Prop()
   noActive: number;
 
-  @Prop({ ref: () => TableGuest })
-  oldUser: Types.ObjectId;
+  @Prop()
+  recordType: number;
+
+  @Prop()
+  oldType: number;
+  @Prop()
+  newType: number;
+
   @Prop({ ref: () => Table })
-  oldTable: Types.ObjectId;
+  table: Types.ObjectId;
 
   @Prop({ ref: () => TableGuest })
+  oldUser: Types.ObjectId;
+  @Prop({ ref: () => TableGuest })
   newUser: Types.ObjectId;
-  @Prop({ ref: () => Table })
-  newTable: Types.ObjectId;
 
   @Prop({ type: Object })
   oldResult: any;
@@ -49,6 +54,9 @@ export class GuestBetModifyRecord extends Document {
   newSettlementData: any;
   @Prop()
   newSettlementMoney: number;
+
+  @Prop()
+  createTimeDate: Date;
 }
 export const GuestBetModifyRecordSchema = SchemaFactory.createForClass(GuestBetModifyRecord);
 GuestBetModifyRecordSchema.set('collection', 'guest_betting_modify_record');

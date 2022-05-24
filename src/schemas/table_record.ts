@@ -21,9 +21,9 @@ export class TableRecord extends Document {
   noActive: number;
   @Prop({ type: Object})
   result: any;
-  @Prop({ type: Object, default: new Date() })
+  @Prop()
   createTimeDate: Date;
-  @Prop({ type: Object, default: new Date() })
+  @Prop()
   modifyTimeDate: Date;
 }
 

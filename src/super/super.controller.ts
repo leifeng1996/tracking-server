@@ -8,7 +8,7 @@ import {
   CALCULATE_RESULT_GAME,
   game_gold_multiple,
   game_member_level,
-  game_ratio_multiple,
+  game_ratio_multiple, TABLE_RUNNING_MODIFY_TYPE,
 } from '../constant/game.constant';
 import { SuperJwtAuthGuard } from '../guard/super.jwt.guard';
 
@@ -256,7 +256,7 @@ export class SuperController {
 
         await this.appService.updateGuestCurrency({
           $inc: { washCode, washCodeCost }
-        }, { user: new Types.ObjectId(val.uid) });
+        }, { user: user._id });
 
          if (settleResult.userBetMoney > 0) {
            billResult = [...billResult, {
@@ -309,6 +309,18 @@ export class SuperController {
     const table = await this.appService.findTableOne({
       _id: new Types.ObjectId(tid)
     });
+    if (!table) throw new HttpException({
+      errCode: -1, message: "该台面不存在"
+    }, HttpStatus.OK);
+
+    const record = await this.appService.findTableRunRecordOne({
+      noRun: table.noRun, noActive,
+      table: new Types.ObjectId(tid)
+    });
+    if (!record) throw new HttpException({
+      errCode: -1, message: "该记录不存在"
+    }, HttpStatus.OK);
+
     await this.appService.updateTableRunRecord({ result }, {
       noRun: table.noRun, noActive,
       table: new Types.ObjectId(tid)
@@ -316,6 +328,15 @@ export class SuperController {
     await this.appService.updateGuestBettingRecordResult(
       tid, table.noRun, noActive, result
     );
+    let modifyParams: any = {
+      table: record.table, noRun: record.noRun,
+      type: TABLE_RUNNING_MODIFY_TYPE.ADMIN_UPT,
+      oldResult: record.result,
+      oldNoActive: record.noActive
+    };
+    modifyParams.newResult = result;
+    await this.appService.createTableRunModifyRecord([ modifyParams ]);
+
     return { message: 'ok' };
   }
 

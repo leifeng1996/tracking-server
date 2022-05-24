@@ -16,14 +16,18 @@ export class TableRunModifyRecord extends Document {
   @Prop()
   table: Types.ObjectId;
   @Prop()
+  type: number;
+  @Prop()
   noRun: number;
   @Prop()
-  noActive: number;
+  oldNoActive: number;
+  @Prop()
+  newNoActive: number;
   @Prop({ type: Object})
   oldResult: any;
   @Prop({ type: Object})
   newResult: any;
-  @Prop({ type: Object, default: new Date() })
+  @Prop({ type: Object })
   createTimeDate: Date;
 }
 

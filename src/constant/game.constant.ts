@@ -41,3 +41,7 @@ export const GAME_NAME: any = {
 }
 /** @description 计算结果的游戏 */
 export const CALCULATE_RESULT_GAME: string[] = ['bac', 'lh'];
+
+export enum TABLE_RUNNING_MODIFY_TYPE {
+  ADMIN_ADD = 1, ADMIN_UPT = 2, ADMIN_DEL = 3, TABLE_UPT
+}

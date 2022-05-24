@@ -8,7 +8,7 @@ import {
   CALCULATE_RESULT_GAME,
   game_agent_level,
   GAME_CHIP_RECORD_TYPE,
-  game_gold_multiple, game_member_level, game_ratio_multiple,
+  game_gold_multiple, game_member_level, game_ratio_multiple, TABLE_RUNNING_MODIFY_TYPE,
 } from '../constant/game.constant';
 import supertest from 'supertest';
 
@@ -435,6 +435,97 @@ export class AdminController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Post('/table/running/record/create')
+  async createTableResultRecord(@Req() req): Promise<any> {
+    let { game, tableNum, noRun, noActive, result } = req.body;
+    const table = await this.appService.findTableOne({
+      game, tableNum
+    });
+    if (!table) throw new HttpException({
+      errCode: -1, message: "选择的台面不存在"
+    }, HttpStatus.OK);
+    if (noActive !== 1) {
+      const lastRecord = await this.appService.findTableRunRecordOne({
+        table: table._id, noRun, noActive: noActive - 1
+      });
+      if (!lastRecord) throw new HttpException({
+        errCode: -1, message: "请先添加上铺结果"
+      }, HttpStatus.OK);
+    }
+    const record = await this.appService.findTableRunRecordOne({
+      table: table._id, noRun, noActive
+    });
+    if (!!record) throw new HttpException({
+      errCode: -1, message: "不允许添加重复记录"
+    }, HttpStatus.OK);
+    let createTimeDate: Date = new Date();
+    await this.appService.createTableRunRecordOne({
+      table: table._id, noRun, noActive, result,
+      createTimeDate, modifyTimeDate: createTimeDate
+    });
+    await this.appService.createTableRunModifyRecord([{
+      table: table._id, noRun, oldNoActive: noActive,
+      type: TABLE_RUNNING_MODIFY_TYPE.ADMIN_ADD,
+      oldResult: result, createTimeDate
+    }]);
+    return { message: 'ok' };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('/table/running/record/update')
+  async updateTableRunningRecord(@Req() req): Promise<any> {
+    let { id, noActive, result } = req.body;
+    const record = await this.appService.findTableRunRecordOne({
+      _id: new Types.ObjectId(id)
+    });
+    if (!record) throw new HttpException({
+      errCode: -1, message: "该结果记录不存在"
+    }, HttpStatus.OK);
+    let params: any = {};
+    if (record.noActive !== noActive)
+      params.noActive = noActive;
+    if (JSON.stringify(record.result) !== JSON.stringify(result))
+      params.result = result;
+    if (Object.keys(params).length === 0) throw new HttpException({
+      errCode: -1, message: "该记录没有任何改动"
+    }, HttpStatus.OK);
+    await this.appService.updateTableRunRecord(params, {
+      _id: new Types.ObjectId(id)
+    });
+    await this.appService.updateGuestBettingRecordResult(
+      record.table.toString(), record.noRun, noActive, result
+    );
+
+    let modifyParams: any = {
+      table: record.table, noRun: record.noRun,
+      type: TABLE_RUNNING_MODIFY_TYPE.ADMIN_UPT,
+      oldResult: record.result,
+      oldNoActive: record.noActive
+    };
+    if (params.result)
+      modifyParams.newResult = params.result;
+    if (params.noActive)
+      modifyParams.newNoActive = params.noActive;
+    await this.appService.createTableRunModifyRecord([ modifyParams ]);
+
+    return { message: 'ok' };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('/table/running/record/delete')
+  async deleteTableRunningRecord(@Req() req): Promise<any> {
+    let { ids } = req.body;
+    return await this.appService.deleteTableRunRecord(ids);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('/table/running/modify/record')
+  async getTableRunningModifyRecord(@Req() req): Promise<any> {
+     const { offset, limit, where } = req.body;
+     return await this.appService.findTableRunModifyRecord(offset, limit, where);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Post('/guest/user/list')
   async getGuestUserList(@Req() req): Promise<any> {
     let { offset, limit, where } = req.body;
@@ -769,10 +860,29 @@ export class AdminController {
     }
 
     let params: any = { description: description || "" };
-    if (record.type !== type)
+
+    let modifyParams: any = {
+      game: record.game,
+      table: record.table,
+      noRun: record.noRun,
+      noActive: record.noActive,
+      oldType: record.type,
+      oldUser: record.user,
+      oldResult: record.result,
+      oldUserBetData: record.userBetData,
+      oldUserBetMoney: record.userBetMoney,
+      oldSettlementData: record.settlementData,
+      oldSettlementMoney: record.settlementMoney,
+    };
+
+    if (record.type !== type) {
       params.type = type;
-    if (record.user.account !== account)
+      modifyParams.newType = type;
+    }
+    if (record.user.account !== account) {
       params.user = user._id;
+      modifyParams.newUser = user._id;
+    }
 
     if (CALCULATE_RESULT_GAME.indexOf(record.game) !== -1) {
       let isUserBetDataChanged: boolean = false;
@@ -784,6 +894,8 @@ export class AdminController {
       }
       if (!!params.user || !!isUserBetDataChanged) {
         params.userBetData = userBetData;
+        modifyParams.newUserBetData = userBetData;
+
         const currency = await this.appService.findGuestCurrencyOne({ _id: user._id });
         currency.washCode -= record.washCode;
         currency.washCodeCost -= record.washCodeCost;
@@ -804,7 +916,7 @@ export class AdminController {
           washCodeCost: currency.washCodeCost,
         }, { user: user._id });
 
-        params = {...params, ...settleResult, ...{washCode, washCodeCost}};
+        params = {...params, ...settleResult, ...{ washCodeCost }};
       }
 
       await this.appService.updateGuestBettingRecordOne(params, {
@@ -812,13 +924,31 @@ export class AdminController {
       });
 
       if (!!result) {
+        modifyParams.newResult = result;
         await this.appService.updateTableRunRecord({ result }, {
           table: record.table._id, noRun: record.noRun, noActive: record.noActive
         });
+        await this.appService.createTableRunModifyRecord([{
+          table: record.table, noRun: record.noRun,
+          oldNoActive: record.noActive,
+          type: TABLE_RUNNING_MODIFY_TYPE.ADMIN_ADD,
+          oldResult: result, createTimeDate: new Date()
+        }]);
         await this.appService.updateGuestBettingRecordResult(
           record.table._id.toString(), record.noRun, record.noActive, result
         );
       }
+
+      const newRecord = await this.appService.findGuestBettingRecordOne({
+        _id: new Types.ObjectId(id)
+      });
+      modifyParams = {...modifyParams, ...{
+          newUserBetMoney: newRecord.userBetMoney,
+          newSettlementData: newRecord.settlementData,
+          newSettlementMoney: newRecord.settlementMoney
+      }};
+      await this.appService.createGuestBetModifyRecord([ modifyParams ]);
+
     } else {
       if (userBetData.win !== 0 && userBetData.lose !== 0) throw new HttpException({
         errCode: -1, message: '输赢只能填写任意一项'
@@ -827,6 +957,9 @@ export class AdminController {
       await this.appService.updateGuestBettingRecordOne(params, {
         _id: new Types.ObjectId(id)
       });
+
+      modifyParams.newSettlementMoney = params.settlementMoney;
+      await this.appService.createGuestBetModifyRecord([ modifyParams ]);
     }
 
     return { message: 'ok' };
@@ -838,6 +971,15 @@ export class AdminController {
     let { ids } = req.body;
     await this.appService.deleteGuestBettingRecord(ids);
     return { message: 'ok' };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('/guest/user/betting/modify/record')
+  async getGuestUserBettingModifyRecord(@Req() req): Promise<any> {
+    let { offset, limit, where } = req.body;
+    return await this.appService.findGuestBetModifyRecord(
+      offset, limit, where
+    );
   }
 
   @UseGuards(AuthGuard('jwt'))
