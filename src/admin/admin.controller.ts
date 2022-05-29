@@ -896,10 +896,6 @@ export class AdminController {
         params.userBetData = userBetData;
         modifyParams.newUserBetData = userBetData;
 
-        const currency = await this.appService.findGuestCurrencyOne({ _id: user._id });
-        currency.washCode -= record.washCode;
-        currency.washCodeCost -= record.washCodeCost;
-
         const settleResult = this.appService.calculateResult(
           result || record.result, userBetData, account === 'sk'
         );
@@ -908,13 +904,22 @@ export class AdminController {
         let washCodeCost: number = 0;
         if (account !== 'sk')
           washCodeCost = (washCode * user.ratio) / game_gold_multiple;
+        console.log("washCode: ", washCode);
+        console.log("washCodeCost: ", washCodeCost);
+        console.log("record.washCode: ", record.washCode);
+        console.log("record.washCodeCost: ", record.washCodeCost);
+        console.log("update: ", {
+          washCode: washCode - record.washCode,
+          washCodeCost: washCodeCost - record.washCodeCost,
+        })
 
-        currency.washCode += washCode;
-        currency.washCodeCost += washCodeCost;
         await this.appService.updateGuestCurrency({
-          washCode: currency.washCode,
-          washCodeCost: currency.washCodeCost,
+          $inc: {
+            washCode: washCode - record.washCode,
+            washCodeCost: washCodeCost - record.washCodeCost,
+          }
         }, { user: user._id });
+
 
         params = {...params, ...settleResult, ...{ washCodeCost }};
       }

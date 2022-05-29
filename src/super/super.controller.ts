@@ -224,9 +224,13 @@ export class SuperController {
       table: new Types.ObjectId(tid),
       noRun: table.noRun , noActive,
     });
-    if (!!record) throw new HttpException({
-      errCode: -1, message: "禁止重复提交"
-    }, HttpStatus.OK);
+    if (!!record) return {
+      record: await this.appService.findTableRunRecord(null, null, {
+        game: table.game, tableNum: table.tableNum,
+        noRun: table.noRun
+      }).then(rs => (rs.list || []).map(val => val.result)),
+      message: "检查到重复提交.同步当靴记录"
+    }
 
     let billResult: any[] = [];
     if (CALCULATE_RESULT_GAME.indexOf(table.game) !== -1) {
