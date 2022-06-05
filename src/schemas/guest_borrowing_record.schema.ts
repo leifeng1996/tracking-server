@@ -1,10 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
-export type TableGuestBorrowingDocument = TableGuestBorrowing & Document;
+export type GuestBorrowingRecordDocument = GuestBorrowingRecord & Document;
 
 @Schema()
-export class TableGuestBorrowing extends Document {
+export class GuestBorrowingRecord extends Document {
   @Prop()
   user: Types.ObjectId;
   @Prop()
@@ -23,5 +23,5 @@ export class TableGuestBorrowing extends Document {
   modifyTimeDate: Date;
 }
 
-export const TableGuestBorrowingSchema = SchemaFactory.createForClass(TableGuestBorrowing);
-TableGuestBorrowingSchema.set('collection', 'table_guest_borrowing');
+export const GuestBorrowingRecordSchema = SchemaFactory.createForClass(GuestBorrowingRecord);
+GuestBorrowingRecordSchema.set('collection', 'guest_borrowing_record');

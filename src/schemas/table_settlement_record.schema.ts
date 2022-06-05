@@ -1,9 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { Table } from './table.schema';
-export type TableSettlementDocument = TableSettlement & Document;
+export type TableSettlementRecordDocument = TableSettlementRecord & Document;
 @Schema()
-export class TableSettlement extends Document {
+export class TableSettlementRecord extends Document {
   @Prop({ ref: () => Table })
   table: Types.ObjectId;
   @Prop()
@@ -30,5 +30,5 @@ export class TableSettlement extends Document {
   modifyTimeDate: Date;
 }
 
-export const TableSettlementSchema = SchemaFactory.createForClass(TableSettlement);
-TableSettlementSchema.set('collection', 'table_settlement');
+export const TableSettlementRecordSchema = SchemaFactory.createForClass(TableSettlementRecord);
+TableSettlementRecordSchema.set('collection', 'table_settlement_record');

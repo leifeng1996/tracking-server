@@ -1,8 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
-export type TableGuestDocument = TableGuest & Document;
+export type GuestDocument = Guest & Document;
 @Schema()
-export class TableGuest extends Document {
+export class Guest extends Document {
   @Prop()
   account: string;
   @Prop()
@@ -14,13 +14,13 @@ export class TableGuest extends Document {
   @Prop()
   level: number;
   @Prop()
-  ratio: number;
+  xmRate: number;
   @Prop()
-  share: number;
+  profitRate: number;
   @Prop()
   status: number;
   @Prop()
-  description: string;
+  remark: string;
   @Prop()
   agent: Types.ObjectId;
   @Prop({ type: Date, default: new Date() })
@@ -61,10 +61,10 @@ export class TableGuest extends Document {
   @Prop()
   lhWater: number;
   @Prop()
-  shareEarnings: number;
+  earnings: number;
   @Prop()
   companyEarnings: number;
 }
 
-export const TableGuestSchema = SchemaFactory.createForClass(TableGuest);
-TableGuestSchema.set('collection', 'table_guest');
+export const GuestSchema = SchemaFactory.createForClass(Guest);
+GuestSchema.set('collection', 'guest');

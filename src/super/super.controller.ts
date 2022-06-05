@@ -8,7 +8,7 @@ import {
   CALCULATE_RESULT_GAME,
   game_gold_multiple,
   game_member_level,
-  game_ratio_multiple, TABLE_RUNNING_MODIFY_TYPE,
+  game_xm_multiple, TABLE_RUNNING_MODIFY_TYPE,
 } from '../constant/game.constant';
 import { SuperJwtAuthGuard } from '../guard/super.jwt.guard';
 
@@ -253,7 +253,7 @@ export class SuperController {
         let washCode: number = settleResult.washCode;
         let washCodeCost: number = 0;
         if (val.account !== 'sk')
-          washCodeCost = (washCode * user.ratio) / game_gold_multiple;
+          washCodeCost = (washCode * user.xmRate) / game_gold_multiple;
 
         console.log("产生洗码量: ", washCode);
         console.log("产生洗码费: ", washCodeCost);

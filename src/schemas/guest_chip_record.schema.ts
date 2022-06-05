@@ -1,10 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
-export type TableGuestChipRecordDocument = TableGuestChipRecord & Document;
+export type GuestChipRecordDocument = GuestChipRecord & Document;
 
 @Schema()
-export class TableGuestChipRecord extends Document {
+export class GuestChipRecord extends Document {
   @Prop()
   user: Types.ObjectId;
   @Prop()
@@ -25,5 +25,5 @@ export class TableGuestChipRecord extends Document {
   modifyTimeDate: Date;
 }
 
-export const TableGuestChipRecordSchema = SchemaFactory.createForClass(TableGuestChipRecord);
-TableGuestChipRecordSchema.set('collection', 'table_guest_chip_record');
+export const GuestChipRecordSchema = SchemaFactory.createForClass(GuestChipRecord);
+GuestChipRecordSchema.set('collection', 'guest_chip_record');

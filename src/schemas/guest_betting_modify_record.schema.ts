@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { Table } from './table.schema';
-import { TableGuest } from './table_guest.schema';
+import { Guest } from './guest.schema';
 
 export type  GuestBetModifyRecordDocument = GuestBetModifyRecord & Document;
 @Schema()
@@ -25,9 +25,9 @@ export class GuestBetModifyRecord extends Document {
   @Prop({ ref: () => Table })
   table: Types.ObjectId;
 
-  @Prop({ ref: () => TableGuest })
+  @Prop({ ref: () => Guest })
   oldUser: Types.ObjectId;
-  @Prop({ ref: () => TableGuest })
+  @Prop({ ref: () => Guest })
   newUser: Types.ObjectId;
 
   @Prop({ type: Object })

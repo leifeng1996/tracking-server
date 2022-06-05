@@ -1,11 +1,11 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { Table } from './table.schema';
-import { TableGuest } from './table_guest.schema';
+import { Guest } from './guest.schema';
 
-export type  TableGuestBettingDocument = TableGuestBetting & Document;
+export type  GuestBettingRecordDocument = GuestBettingRecord & Document;
 @Schema()
-export class TableGuestBetting extends Document {
+export class GuestBettingRecord extends Document {
   @Prop()
   game: string;
   @Prop()
@@ -14,7 +14,7 @@ export class TableGuestBetting extends Document {
   noRun: number;
   @Prop()
   noActive: number;
-  @Prop({ ref: () => TableGuest })
+  @Prop({ ref: () => Guest })
   user: Types.ObjectId;
   @Prop({ ref: () => Table })
   table: Types.ObjectId;
@@ -55,5 +55,5 @@ export class TableGuestBetting extends Document {
   @Prop()
   description: string;
 }
-export const TableGuestBettingSchema = SchemaFactory.createForClass(TableGuestBetting);
-TableGuestBettingSchema.set('collection', 'table_guest_betting');
+export const GuestBettingRecordSchema = SchemaFactory.createForClass(GuestBettingRecord);
+GuestBettingRecordSchema.set('collection', 'guest_betting_record');

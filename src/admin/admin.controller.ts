@@ -8,7 +8,7 @@ import {
   CALCULATE_RESULT_GAME,
   game_agent_level,
   GAME_CHIP_RECORD_TYPE,
-  game_gold_multiple, game_member_level, game_ratio_multiple, TABLE_RUNNING_MODIFY_TYPE,
+  game_gold_multiple, game_member_level, game_xm_multiple, TABLE_RUNNING_MODIFY_TYPE,
 } from '../constant/game.constant';
 import supertest from 'supertest';
 
@@ -351,7 +351,6 @@ export class AdminController {
     // }, HttpStatus.OK);
 
     data.superPass = Encrypt.md5(data.superPass).toLocaleUpperCase();
-    data.modifyTimeDate = new Date();
     return await this.appService.updateTable(data, {
       _id: new Types.ObjectId(id)
     });
@@ -402,7 +401,6 @@ export class AdminController {
       params.realName = realName;
     if (user.table !== new Types.ObjectId(tableId))
       params.table = new Types.ObjectId(tableId)
-    params.modifyTimeDate = new Date();
     return await this.appService.updateTableUser({
       realName, table: new Types.ObjectId(tableId),
       modifyTimeDate: new Date()
@@ -542,7 +540,7 @@ export class AdminController {
   @UseGuards(AuthGuard('jwt'))
   @Post('/guest/user/create')
   async createGuestUser(@Req() req): Promise<any> {
-    const { account, password, realName, phone, level, share, ratio, status, agent } = req.body;
+    const { account, password, realName, phone, level, profitRate, xmRate, status, agent } = req.body;
     const user = await this.appService.findGuestUserOne({
       account, level
     });
@@ -556,8 +554,8 @@ export class AdminController {
       password: Encrypt.md5(password).toLocaleUpperCase()
     }
 
-    if (level === 1) params.share = share;
-    else if (level === 2) params.ratio = ratio;
+    if (level === 1) params.profitRate = profitRate;
+    else if (level === 2) params.xmRate = xmRate;
 
     if (agent) {
       if (level === game_agent_level) throw new HttpException({
@@ -579,12 +577,12 @@ export class AdminController {
   @Post('/guest/user/update')
   async updateGuestUser(@Req() req): Promise<any> {
     const {
-      id, password, realName, phone, level, share,
-      ratio, description, status
+      id, password, realName, phone, level, profitRate,
+      xmRate, remark, status
     } = req.body;
-    let params: any = { realName, phone, description, status };
-    if (level === 1) params.share = share;
-    else if (level === 2) params.ratio = ratio;
+    let params: any = { realName, phone, remark, status };
+    if (level === 1) params.profitRate = profitRate;
+    else if (level === 2) params.xmRate = xmRate;
     if (!!password && password.length >= 6)
       params.password = Encrypt.md5(password).toLocaleUpperCase();
 
@@ -787,7 +785,7 @@ export class AdminController {
       let washCode: number = settleResult.washCode;
       let washCodeCost: number = 0;
       if (account !== 'sk')
-        washCodeCost = (washCode * user.ratio) / game_gold_multiple;
+        washCodeCost = (washCode * user.xmRate) / game_gold_multiple;
 
       await this.appService.updateGuestCurrency({
         $inc: { washCode, washCodeCost }
@@ -903,7 +901,7 @@ export class AdminController {
         let washCode: number = settleResult.washCode;
         let washCodeCost: number = 0;
         if (account !== 'sk')
-          washCodeCost = (washCode * user.ratio) / game_gold_multiple;
+          washCodeCost = (washCode * user.xmRate) / game_gold_multiple;
         console.log("washCode: ", washCode);
         console.log("washCodeCost: ", washCodeCost);
         console.log("record.washCode: ", record.washCode);
@@ -1007,7 +1005,7 @@ export class AdminController {
     if (currency.washCodeCost < money) throw new HttpException({
       errCode: -1, message: '洗码费余额不足'
     }, HttpStatus.OK);
-    const settleCode = parseFloat((money / (user.ratio / game_ratio_multiple)).toFixed(2));
+    const settleCode = parseFloat((money / (user.xmRate / game_xm_multiple)).toFixed(2));
     currency.washCode -= settleCode;
     currency.washCodeCost -= money;
     await this.appService.updateGuestCurrency({

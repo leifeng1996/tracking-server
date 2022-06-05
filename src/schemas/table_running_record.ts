@@ -9,10 +9,10 @@ export interface result {
   bankerPair?: boolean;
   playerPair?: boolean;
 }
-export type TableRecordDocument = TableRecord & Document;
+export type TableRunningRecordDocument = TableRunningRecord & Document;
 
 @Schema()
-export class TableRecord extends Document {
+export class TableRunningRecord extends Document {
   @Prop()
   table: Types.ObjectId;
   @Prop()
@@ -27,6 +27,6 @@ export class TableRecord extends Document {
   modifyTimeDate: Date;
 }
 
-export const TableRecordSchema = SchemaFactory.createForClass(TableRecord);
-TableRecordSchema.set('collection', 'table_record');
+export const TableRunningRecordSchema = SchemaFactory.createForClass(TableRunningRecord);
+TableRunningRecordSchema.set('collection', 'table_running_record');
 
