@@ -950,6 +950,7 @@ export class AdminController {
           newSettlementData: newRecord.settlementData,
           newSettlementMoney: newRecord.settlementMoney
       }};
+
       await this.appService.createGuestBetModifyRecord([ modifyParams ]);
 
     } else {

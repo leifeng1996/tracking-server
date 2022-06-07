@@ -91,7 +91,7 @@ export class SuperController {
     return {
       table, record: await this.appService.findTableRunRecord(null, null, {
         game: table.game, tableNum: table.tableNum,
-        noRun: table.noRun
+        noRun: table.noRun, scopeTimeDate: [ table.initTimeDate, new Date() ]
       }).then(rs => (rs.list || []).map(val => val.result))
     }
   }
@@ -189,6 +189,9 @@ export class SuperController {
     });
     if (!user) throw new HttpException({
       errCode: -1, message: '会员不存在，请查证后重试！'
+    }, HttpStatus.OK);
+    if (user.status !== 0) throw new HttpException({
+      errCode: -1, message: '该会员已冻结，请咨询管理员！'
     }, HttpStatus.OK);
     return { uid: user._id.toString(), account: user.account }
   }
