@@ -143,11 +143,11 @@ export class SuperController {
     const table = await this.appService.findTableOne({
       _id: new Types.ObjectId(tid)
     });
+    const overTimeDate = new Date();
     const statistics = await this.appService.findGuestBettingStatistics({
       game: table.game, tableNum: table.tableNum,
-      scopeTimeDate: [ table.initTimeDate, new Date() ]
+      scopeTimeDate: [ table.initTimeDate, overTimeDate ]
     });
-    const overTimeDate = new Date();
     await this.appService.updateTable({
       initCash: 0, initChip: 0,
       middleCash: 0, middleChip: 0,
@@ -172,9 +172,25 @@ export class SuperController {
   @Post('/create/new/run')
   private async createRun(@Req() req): Promise<any> {
     const { uid, tid } = req.user;
-    await this.appService.updateTable({ $inc: { noRun: 1 } }, {
+    const { newNoRun } = req.body;
+
+    if (isNaN(newNoRun)) throw new HttpException({
+      errCode: -1, message: "新靴发生错误"
+    }, HttpStatus.OK);
+
+    const table = await this.appService.findTableOne({
       _id: new Types.ObjectId(tid)
     });
+    console.log("table.noRun: ", table.noRun);
+    console.log("newNoRun: ", newNoRun);
+    if (table.noRun === newNoRun) return {
+      noRun: table.noRun,
+      message: "禁止创建相同场次.同步最新场次"
+    };
+
+    table.noRun += 1;
+    await table.save();
+
     return { message: 'ok' };
   }
 

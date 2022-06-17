@@ -1,18 +1,20 @@
+/** @description temp app service */
+
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import Mongoose, { Model, Types } from 'mongoose';
 import { TableDocument } from './schemas/table.schema';
 import { TableUserDocument } from './schemas/table_user.schema';
-import { TableGuestDocument } from './schemas/table_guest.schema';
-import { TableRecordDocument } from './schemas/table_record';
-import { TableGuestBettingDocument } from './schemas/table_guest_betting.schema';
-import { TableSettlementDocument } from './schemas/table_settlement.schema';
+import { GuestDocument } from './schemas/guest.schema';
+import { TableRunningRecordDocument } from './schemas/table_running_record';
+import { GuestBettingRecordDocument } from './schemas/guest_betting_record.schema';
+import { TableSettlementRecordDocument } from './schemas/table_settlement_record.schema';
 import {
-  CALCULATE_RESULT_GAME,
+  CALCULATE_RESULT_GAME, game_agent_level,
   game_area_multiple,
   game_area_multiple_sk, GAME_CHIP_RECORD_TYPE,
-  game_gold_multiple, GAME_MONEY_TYPE, GAME_NAME,
-  game_ratio_multiple,
+  game_gold_multiple, game_member_level, GAME_MONEY_TYPE, GAME_NAME,
+  game_xm_multiple, TABLE_RUNNING_MODIFY_TYPE,
 } from './constant/game.constant';
 import { AdminUserDocument } from './schemas/admin_user.schema';
 import { AdminMenuDocument } from './schemas/admin_menu.schema';
@@ -21,25 +23,34 @@ import { AdminPermissionDocument } from './schemas/admin_permission.schema';
 import { AdminRoleMenuDocument } from './schemas/admin_role_menu';
 import { AdminRolePermissionDocument } from './schemas/admin_role_permission';
 import { AdminUserRoleDocument } from './schemas/admin_user_role';
-import { TableGuestCurrencyDocument } from './schemas/table_guest_currency.schema';
-import { TableGuestBorrowingDocument } from './schemas/table_guest_borrowing.schema';
-import { TableGuestChipRecordDocument } from './schemas/table_guest_chip.schema';
-import { TableGuestSettlementDocument } from './schemas/table_guest_settlement.schema';
+import { GuestCurrencyDocument } from './schemas/guest_currency.schema';
+import { GuestBorrowingRecordDocument } from './schemas/guest_borrowing_record.schema';
+import { GuestChipRecordDocument } from './schemas/guest_chip_record.schema';
+import { GuestSettlementRecordDocument } from './schemas/guest_settlement_record.schema';
+import { SuperLoginTokenDocument } from './schemas/super_login_token';
+import * as mongoose from 'mongoose';
+import { TableRunModifyRecordDocument } from './schemas/table_running_modify_record';
+import { GuestBetModifyRecordDocument } from './schemas/guest_betting_modify_record.schema';
+
 
 @Injectable()
 export class AppService {
   constructor(
+    @InjectModel('SuperLoginToken') private superLoginTokenModel: Model<SuperLoginTokenDocument>,
+
     @InjectModel('Table') private tableModel: Model<TableDocument>,
     @InjectModel('TableUser') private tableUserModel: Model<TableUserDocument>,
-    @InjectModel('TableRecord') private tableRunRecordModel: Model<TableRecordDocument>,
-    @InjectModel('TableSettlement') private tableSettlementRecordModel: Model<TableSettlementDocument>,
+    @InjectModel('TableRunningRecord') private tableRunRecordModel: Model<TableRunningRecordDocument>,
+    @InjectModel('TableRunModifyRecord') private tableRunModifyRecordModel: Model<TableRunModifyRecordDocument>,
+    @InjectModel('TableSettlementRecord') private tableSettlementRecordModel: Model<TableSettlementRecordDocument>,
 
-    @InjectModel('TableGuest') private tableGuestModel: Model<TableGuestDocument>,
-    @InjectModel('TableGuestBetting') private bettingRecordModel: Model<TableGuestBettingDocument>,
-    @InjectModel('TableGuestCurrency') private tableGuestCurrencyModel: Model<TableGuestCurrencyDocument>,
-    @InjectModel('TableGuestBorrowing') private tableGuestBorrowingModel: Model<TableGuestBorrowingDocument>,
-    @InjectModel('TableGuestChipRecord') private tableGuestChipRecordModel: Model<TableGuestChipRecordDocument>,
-    @InjectModel('TableGuestSettlement') private tableGuestSettlementModel: Model<TableGuestSettlementDocument>,
+    @InjectModel('Guest') private guestModel: Model<GuestDocument>,
+    @InjectModel('GuestCurrency') private guestCurrencyModel: Model<GuestCurrencyDocument>,
+    @InjectModel('GuestChipRecord') private tableGuestChipRecordModel: Model<GuestChipRecordDocument>,
+    @InjectModel('GuestBettingRecord') private guestBetRecordModel: Model<GuestBettingRecordDocument>,
+    @InjectModel('GuestBorrowingRecord') private guestBorrowingRecordModel: Model<GuestBorrowingRecordDocument>,
+    @InjectModel('GuestBetModifyRecord') private guestBetModifyRecordModel: Model<GuestBetModifyRecordDocument>,
+    @InjectModel('GuestSettlementRecord') private tableGuestSettlementRecordModel: Model<GuestSettlementRecordDocument>,
 
     @InjectModel('AdminUser') private adminUserModel: Model<AdminUserDocument>,
     @InjectModel('AdminMenu') private adminMenuModel: Model<AdminMenuDocument>,
@@ -63,23 +74,29 @@ export class AppService {
   async createTable(arr: any[]): Promise<any> {
     return await this.tableModel.create(arr.map(val => {
       val.createTimeDate = new Date();
-      val.modifyTimeDate = new Date();
       return val;
     }));
   }
   async updateTable(params: any, where?: any): Promise<any> {
-    params.modifyTimeDate = new Date();
     return await this.tableModel
       .updateMany(params)
       .where(where || {})
       .exec();
   }
   async deleteTable(ids: string[]): Promise<any> {
-    return await this.tableModel
-      .deleteMany({
-        _id: { $in: ids.map(val => new Types.ObjectId(val) ) }
-      })
-      .exec();
+    let tables = await this.tableModel.find({
+      _id: { $in: ids.map(val => new Types.ObjectId(val) ) }
+    }).exec();
+    for (let i = 0; i < tables.length; ++i) {
+      let table = tables[i];
+      await this.guestBetRecordModel.deleteMany({
+        table: table._id
+      });
+      await this.tableRunRecordModel.deleteMany({
+        table: table._id
+      });
+      await table.deleteOne();
+    }
   }
 
   async findTableUser(): Promise<any> {
@@ -96,12 +113,10 @@ export class AppService {
   async createTableUser(arr: any[]): Promise<any> {
     return await this.tableUserModel.create(arr.map(val => {
       val.createTimeDate = new Date();
-      val.modifyTimeDate = new Date();
       return val;
     }));
   }
   async updateTableUser(params, where?: any): Promise<any> {
-    params.modifyTimeDate = new Date();
     return await this.tableUserModel
       .updateOne(params)
       .where(where || {})
@@ -113,10 +128,76 @@ export class AppService {
     }).exec();
   }
 
-  async findTableRunRecord(where?: any): Promise<any> {
-    return await this.tableRunRecordModel
-      .find(where || {})
-      .exec();
+  async findTableRunRecord(offset: number, limit: number, where?: any): Promise<any> {
+    let match: any = { };
+    if (!!where && !!where.game) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { 'table.game': where.game }]
+      else match.$and = [{ 'table.game': where.game }];
+    }
+    if (!!where && !isNaN(where.noRun)) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { noRun: where.noRun }]
+      else match.$and = [{ noRun: where.noRun }];
+    }
+    if (!!where && !isNaN(where.noActive)) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { noActive: where.noActive }]
+      else match.$and = [{ noActive: where.noActive }];
+    }
+    if (!!where && !isNaN(where.tableNum)) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { 'table.tableNum': where.tableNum }]
+      else match.$and = [{ 'table.tableNum': where.tableNum }];
+    }
+    if (!!where && !!where.scopeTimeDate) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { createTimeDate: {
+            $gte: new Date(where.scopeTimeDate[0]),
+            $lte: new Date(where.scopeTimeDate[1])
+          }}]
+      else match.$and = [{ createTimeDate: {
+          $gte: new Date(where.scopeTimeDate[0]),
+          $lte: new Date(where.scopeTimeDate[1])
+        }}];
+    }
+    let pipeline: any[] = [
+      {
+        $lookup: {
+          from: 'table',
+          localField: 'table',
+          foreignField: '_id',
+          pipeline: [{ $project: { _id: false, user: false } }],
+          as: 'table'
+        }
+      },
+      { $match: match },
+    ]
+    console.log("$match.and: ", match.$and);
+    let countPipeline = [...[], ...pipeline, { $count: 'count' }];
+    if (!!offset) pipeline = [...pipeline, { $skip: offset }];
+    if (!!limit) pipeline = [...pipeline, { $limit: limit }];
+    // let promises = [await this.tableRunRecordModel.aggregate(pipeline).exec()]
+    // if (offset !== null && limit !== null) promises = [
+    //     ...promises,
+    //     await this.tableRunRecordModel.aggregate(countPipeline).exec()
+    //   ];
+    return await Promise.all([
+      await this.tableRunRecordModel.aggregate(pipeline).exec(),
+      await this.tableRunRecordModel.aggregate(countPipeline).exec(),
+    ]).then((rs) => {
+      console.log("length: ", rs[1]);
+      return {
+        list: rs[0].filter(val => {
+          return !!val.table && !!val.table[0];
+        }).map(val => {
+          val.table = val.table[0] || null!;
+          return  val;
+        }) || [],
+        // statistical: await this.findGuestBettingStatistics(where),
+        total: rs[1] && rs[1].length !== 0 ? rs[1][0].count : 0
+      }
+    })
   }
   async findTableRunRecordOne(where: any): Promise<any> {
     return await this.tableRunRecordModel
@@ -124,18 +205,108 @@ export class AppService {
       .exec();
   }
   async createTableRunRecord(arr: any[]): Promise<any> {
-    return await this.tableRunRecordModel.create(arr.map(val => {
-      val.createTimeDate = new Date();
-      val.modifyTimeDate = new Date();
-      return val;
-    }))
+    return await this.tableRunRecordModel.create(arr);
+  }
+  async createTableRunRecordOne(params: any): Promise<any> {
+    return await this.tableRunRecordModel.create(params);
   }
   async updateTableRunRecord(params: any, where?: any): Promise<any> {
-    params.modifyTimeDate = new Date();
     return await this.tableRunRecordModel
       .updateMany(params)
       .where(where || {})
       .exec();
+  }
+  async deleteTableRunRecord(ids: string[]): Promise<any> {
+    let records = await this.tableRunRecordModel.find({
+      _id: { $in: ids.map(id => new Types.ObjectId(id)) }
+    });
+    let del = [];
+    for (let i = 0; i < records.length; ++i) {
+      let record = records[i];
+      await this.createTableRunModifyRecord([{
+        table: record.table, noRun: record.noRun,
+        oldNoActive: record.noActive,
+        type: TABLE_RUNNING_MODIFY_TYPE.ADMIN_DEL,
+        oldResult: record.result, createTimeDate: new Date()
+      }]);
+      await record.deleteOne();
+      del = [...del, record._id.toString()];
+    }
+    return del;
+  }
+
+  async findTableRunModifyRecord(offset: number, limit: number, where?: any): Promise<any> {
+    let match: any = { };
+    if (!!where && !!where.game) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { 'table.game': where.game }]
+      else match.$and = [{ 'table.game': where.game }];
+    }
+    // if (!!where && !isNaN(where.noRun)) {
+    //   if (!!match.$and)
+    //     match.$and = [...match.$and, { noRun: where.noRun }]
+    //   else match.$and = [{ noRun: where.noRun }];
+    // }
+    // if (!!where && !isNaN(where.noActive)) {
+    //   if (!!match.$and)
+    //     match.$and = [...match.$and, { noActive: where.noActive }]
+    //   else match.$and = [{ noActive: where.noActive }];
+    // }
+    if (!!where && !isNaN(where.tableNum)) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { 'table.tableNum': where.tableNum }]
+      else match.$and = [{ 'table.tableNum': where.tableNum }];
+    }
+    if (!!where && !!where.scopeTimeDate) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { createTimeDate: {
+            $gte: new Date(where.scopeTimeDate[0]),
+            $lte: new Date(where.scopeTimeDate[1])
+          }}]
+      else match.$and = [{ createTimeDate: {
+          $gte: new Date(where.scopeTimeDate[0]),
+          $lte: new Date(where.scopeTimeDate[1])
+        }}];
+    }
+    console.log("$and: ", match.$and)
+    let pipeline: any[] = [
+      {
+        $lookup: {
+          from: 'table',
+          localField: 'table',
+          foreignField: '_id',
+          pipeline: [{ $project: { _id: false, user: false } }],
+          as: 'table'
+        }
+      },
+      { $match: match },
+    ]
+    let countPipeline = [...[], ...pipeline, { $count: 'count' }];
+    if (!!offset) pipeline = [...pipeline, { $skip: offset }];
+    if (!!limit) pipeline = [...pipeline, { $limit: limit }];
+    return await this.tableRunModifyRecordModel.aggregate([{
+      $facet: {
+        list: pipeline,
+        total: countPipeline,
+      }
+    }]).exec().then(rs => {
+      console.log("rs: ", rs);
+      return {
+        list: rs[0].list.filter(val => {
+          return !!val.table && !!val.table[0];
+        }).map(val => {
+          val.table = val.table[0] || null!;
+          return  val;
+        }) || [],
+        total: rs[0].total.length === 0 ? 0 : rs[0].total[0].count
+      }
+    })
+  }
+  async createTableRunModifyRecord(arr: any[]): Promise<any> {
+    return await this.tableRunModifyRecordModel.create(arr.map(val => {
+      if (!val.createTimeDate) val.createTimeDate = new Date();
+      return val;
+    }))
   }
 
   /** @description 需要优化 */
@@ -146,7 +317,7 @@ export class AppService {
         match.$and = [...match.$and, { 'table.game': where.game }]
       else match.$and = [{ 'table.game': where.game }];
     }
-    if (!!where && !isNaN(where.tableNum)) {
+    if (!!where && !isNaN(parseInt(where.tableNum))) {
       if (!!match.$and)
         match.$and = [...match.$and, { 'table.tableNum': where.tableNum }]
       else match.$and = [{ 'table.tableNum': where.tableNum }];
@@ -169,7 +340,7 @@ export class AppService {
           localField: 'table',
           foreignField: '_id',
           pipeline: [
-            { $project: { _id: 0, game: 1, tableNum: 1 }}
+            { $project: { _id: 1, game: 1, tableNum: 1 }}
           ],
           as: 'table'
         }
@@ -177,31 +348,68 @@ export class AppService {
       { $match: match },
       { $sort: { _id: -1 } }
     ];
+    let countPipeline = [...[], ...pipeline, { $count: 'count' }];
     if (!!offset) pipeline = [...pipeline, { $skip: offset }]
     if (!!limit) pipeline = [...pipeline, { $limit: limit }]
-    return this.tableSettlementRecordModel.aggregate(pipeline).exec().then(async rs => {
+    return await Promise.all([
+      await this.tableSettlementRecordModel.aggregate(pipeline).exec(),
+      await this.tableSettlementRecordModel.aggregate(countPipeline).exec(),
+    ]).then(async (rs) => {
       let statistical = { totalWin: 0 };
-      for (let k in GAME_NAME) statistical[`${k}TotalWin`] = 0;
-      for (let i = 0; i < rs.length; ++i) {
-        let value: number = rs[i].totalWinChip + rs[i].totalWinCash;
-        statistical.totalWin += value;
-        statistical[`${rs[i].table[0].game}TotalWin`] += value;
-      }
-      return {
-        statistical,
-        list: rs.map(val => {
-          val.table = val.table[0];
-          return val;
-        }),
-        total: await this.tableSettlementRecordModel.count(match),
+      for (let k in GAME_NAME)
+        statistical[`${k}TotalWin`] = 0;
 
+      let list = [];
+      let settlementRecords = rs[0] || [];
+      for (let i = 0; i < settlementRecords.length; ++i) {
+        let val: any = Object.assign({}, settlementRecords[i]);
+        if (!val.table) continue;
+        const records = await this.guestBetRecordModel.aggregate([
+          {
+            $match: {
+              table: val.table[0]._id,
+              createTimeDate: {
+                $gte: val.initTimeDate,
+                $lte: val.overTimeDate
+              }
+            }
+          },
+          {
+            $group: {
+              _id: { type: '$type' },
+              settlementMoney: { $sum: '$settlementMoney' },
+            }
+          }
+        ]).exec();
+
+        val.totalWin = 0;
+        val.totalWinCash = 0;
+        val.totalWinChip = 0;
+        for (let j = 0; j < records.length; ++j) {
+          if (records[j]._id.type === GAME_MONEY_TYPE.CASH)
+            val.totalWinCash = records[j].settlementMoney;
+          if (records[j]._id.type === GAME_MONEY_TYPE.CHIP)
+            val.totalWinChip = records[j].settlementMoney;
+        }
+
+        val.table = val.table[0];
+        val.totalWin += val.totalWinChip + val.totalWinCash;
+
+        statistical.totalWin += val.totalWin;
+        statistical[`${val.table.game}TotalWin`] += val.totalWin;
+
+        list = [...list, val];
       }
-    });
+
+      return {
+        list, statistical,
+        total: rs[1] && rs[1].length !== 0 ? rs[1][0].count : 0
+      }
+    })
   }
   async createTableSettlementRecord(arr: any[]): Promise<any> {
     return await this.tableSettlementRecordModel.create(arr.map(val => {
       val.createTimeDate = new Date();
-      val.modifyTimeDate = new Date();
       return val;
     }))
   }
@@ -210,21 +418,27 @@ export class AppService {
     let match: any = {};
     let pipelineMatch: any = {};
     if (!!where && !!where.account) {
-      const user = await this.tableGuestModel.findOne({
-        account: where.account
+      const agent = await this.guestModel.findOne({
+        account: { $regex: eval(`/^${where.account}$/i`) },
+        level: game_agent_level
       });
-      if (!user) return { list: [], total: 0, statistical: {} };
-      match = {
-        $and: [
-          { $or: [{ account: where.account }, { agent: user._id }] }
-        ]
-      }
+      match = { $and: [] };
+      if (!!agent)
+        match.$and = [...match.$and, { $or: [{ account: { $regex: eval(`/^${where.account}$/i`) } }, { agent: agent._id }] }];
+      else
+        match.$and = [...match.$and, { account: { $regex: eval(`/^${where.account}$/i`) } }];
     }
 
     if (!!where && !isNaN(where.level)) {
-      if (!!match.$and)
-        match.$and = [...match.$and, { level: where.level }]
-      else match.$and = [{ level: where.level }];
+      if (where.level !== 3) {
+        if (!!match.$and)
+          match.$and = [...match.$and, { level: where.level }]
+        else match.$and = [{ level: where.level }];
+      } else {
+        if (!!match.$and)
+          match.$and = [...match.$and, { agent: { $exists: 0 } }, { level: game_member_level }]
+        else match.$and = [{ agent: { $exists: 0 } }, { level: game_member_level }];
+      }
     }
     if (!!where && !isNaN(where.status)) {
       if (!!match.$and)
@@ -241,7 +455,7 @@ export class AppService {
       { $match: match},
       {
         $lookup: {
-          from: 'table_guest_currency',
+          from: 'guest_currency',
           localField: '_id',
           foreignField: 'user',
           pipeline: [{ $project: { _id: false, user: false } }],
@@ -250,7 +464,7 @@ export class AppService {
       },
       {
         $lookup: {
-          from: 'table_guest_chip_record',
+          from: 'guest_chip_record',
           localField: '_id',
           foreignField: 'user',
           pipeline: [
@@ -263,122 +477,231 @@ export class AppService {
           ],
           as : 'totalChip'
         }
-      },
-      // 全部洗码量 | 全部洗码费
-      {
-        $lookup: {
-          from: 'table_guest_betting',
-          localField: '_id',
-          foreignField: 'user',
-          pipeline: [
-            {
-              $group: {
-                _id: 'totalBetSum',
-                washCode: { $sum: '$washCode', },
-                washCodeCost: { $sum: '$washCodeCost' }
-              }
-            }
-          ],
-          as : 'totalBetSum'
-        }
-      },
-      // 已结算洗码
-      {
-        $lookup: {
-          from: 'table_guest_settlement',
-          localField: '_id',
-          foreignField: 'user',
-          pipeline: [
-            {
-              $group: {
-                _id: 'totalSettle',
-                washCode: { $sum: '$washCode', },
-                washCodeCost: { $sum: '$washCodeCost' }
-              }
-            }
-          ],
-          as : 'totalSettle'
-        }
-      },
-      // 范围投注统计
-      {
-        $lookup: {
-          from: 'table_guest_betting',
-          localField: '_id',
-          foreignField: 'user',
-          pipeline: [
-            { $match: pipelineMatch },
-            {
-              $group: {
-                _id: { type: '$type' },
-                washCode: { $sum: '$washCode', },
-                washCodeCost: { $sum: '$washCodeCost', },
-                totalBet: { $sum: '$userBetMoney', },
-                validBet: { $sum: '$validBetMoney' },
-                settlementMoney: { $sum: '$settlementMoney' }
-              }
-            }
-          ],
-          as : 'betSum'
-        }
-      },
-      // 游戏总赢统计
-      {
-        $lookup: {
-          from: 'table_guest_betting',
-          localField: '_id',
-          foreignField: 'user',
-          pipeline: [
-            { $match: {...{ settlementMoney: { $gte: 0 } }, ...pipelineMatch} },
-            {
-              $group: {
-                _id: { game: '$game' },
-                value: { $sum: '$settlementMoney' }
-              }
-            }
-          ],
-          as : `gameTotalWin`
-        }
-      },
-      {
-        $lookup: {
-          from: 'table_guest_betting',
-          localField: '_id',
-          foreignField: 'user',
-          pipeline: [
-            { $match: {...{ settlementMoney: { $lte: 0 } }, ...pipelineMatch} },
-            {
-              $group: {
-                _id: { game: '$game' },
-                value: { $sum: '$settlementMoney' }
-              }
-            }
-          ],
-          as : `gameTotalLose`
-        }
-      },
+      }
     ];
     pipeline = [...pipeline, {
       $lookup: {
-        from: 'table_guest',
+        from: 'guest',
         localField: '_id',
         foreignField: 'agent',
-        pipeline: [...pipeline, {
-          $project: {
-            _id: 0, account: 0, password: 0, realName: 0, phone: 0,
-            level: 0, agent: 0, status: 0, description: 0,
-            createTimeDate: 0, modifyTimeDate: 0
-          }
-        }],
+        pipeline: [
+          ...pipeline.filter(val => {
+            return !val.$match;
+          }), {
+            $project: {
+              _id: 1, account: 0, password: 0, realName: 0, phone: 0,
+              level: 0, agent: 0, status: 0, description: 0,
+              createTimeDate: 0, modifyTimeDate: 0
+            }
+          }],
         as: 'team'
       }
     },
-      { $project: { password: 0 } },
-      { $sort: { level: 1, _id: 1 } }
+      { $sort: { level: 1, _id: 1 } },
+      { $project: { password: 0 } }
     ];
     if (!!offset) pipeline = [...pipeline, { $skip: offset }]
     if (!!limit) pipeline = [...pipeline, { $limit: limit }]
-    return await this.tableGuestModel
+    return await this.guestModel
+      .aggregate(pipeline)
+      .exec().then(async rs => {
+        let list: any[] = [];
+        for (let i = 0; i < rs.length; ++i) {
+          let val = rs[i];
+          if (val.level === 1) {
+            // 初始化属性
+            val.chip = 0; val.borrowing = 0;
+            val.totalBet = 0; val.validBet = 0;
+            val.totalWin = 0;val.outChip = 0; val.intoChip = 0;
+            val.totalWinCash = 0; val.totalWinChip = 0;
+            val.washCode = 0; val.washCodeCost = 0;
+            val.earnings = 0; val.companyEarnings = 0;
+            val.notSettleWashCode = 0; val.washCodeBalance = 0;
+            for (let i = 0; i < Object.keys(GAME_NAME).length; ++i) {
+              let game: string = Object.keys(GAME_NAME)[i];
+              val[`${game}Win`] = 0;
+              val[`${game}Lose`] = 0;
+              val[`${game}Water`] = 0;
+            }
+
+            let team = val.team;
+            for (let j = 0; j < team.length; ++j) {
+              let member: any = team[j];
+              member.betRecords = /*await this.guestBetRecordModel.find({
+                ...pipelineMatch, ...{ user: member._id }
+              })*/await this.guestBetRecordModel.aggregate([
+                { $match: {...pipelineMatch, ...{ user: member._id }} },
+                { $project: {
+                    game: 1, type: 1, washCode: 1, washCodeCost: 1,
+                    userBetMoney: 1, settlementMoney: 1
+                  }}
+              ]) || [];
+              let structure = this.toGuestMemberStructure(member);
+              let keys: string[] = Object.keys(structure);
+              for (let k = 0; k < keys.length; ++k)
+                val[keys[k]] += structure[keys[k]];
+              delete member.betRecords;
+            }
+            let totalWin: number = val.totalWin > 0 ? 0 - val.totalWin : Math.abs(val.totalWin);
+            let earnings = totalWin - val.washCodeCost;
+            val.earnings = earnings * (val.profitRate / 100);
+            val.companyEarnings = Math.abs(earnings * game_gold_multiple) - Math.abs(val.earnings * game_gold_multiple);
+            if (earnings < 0) val.companyEarnings = 0 - val.companyEarnings;
+            val.companyEarnings /= game_gold_multiple;
+            delete val.team;
+          } else {
+            val.betRecords = /*await this.guestBetRecordModel.find({
+                ...pipelineMatch, ...{ user: val._id }
+              })*/await this.guestBetRecordModel.aggregate([
+              { $match: {...pipelineMatch, ...{ user: val._id }} },
+              { $project: {
+                  game: 1, type: 1, washCode: 1, washCodeCost: 1,
+                  userBetMoney: 1, settlementMoney: 1
+                }}
+            ]) || [];
+            let structure = this.toGuestMemberStructure(val);
+            val = { ...val, ...structure };
+          }
+          delete val.betRecords;
+
+          delete val.betSum;
+          delete val.currency;
+          delete val.totalChip;
+          delete val.gameTotalWin;
+          delete val.gameTotalLose;
+          val.washCodeCost = parseFloat(val.washCodeCost.toFixed(2));
+          val.washCodeBalance = parseFloat(val.washCodeBalance.toFixed(2));
+          val.notSettleWashCode = parseFloat(val.notSettleWashCode.toFixed(2));
+          if (!!val.earnings) val.earnings = parseFloat(val.earnings.toFixed(2));
+          if (!!val.companyEarnings) val.companyEarnings = parseFloat(val.companyEarnings.toFixed(2));
+          list = [...list, val];
+        }
+        return {
+          list: list,
+          total: await this.guestModel.count().where(match),
+        }
+      });
+  }
+  async findGuestUserOne(where: any): Promise<any> {
+    return this.guestModel
+      .findOne(where)
+      .exec();
+  }
+  async createGuestUser(arr: any[]): Promise<any> {
+    return await this.guestModel.create(arr.map(val => {
+      val.createTimeDate = new Date();
+      return val;
+    }));
+  }
+  async updateGuestUser(params: any, where?: any): Promise<any> {
+    return this.guestModel
+      .updateMany(params)
+      .where(where)
+      .exec();
+  }
+  async deleteGuestUser(ids: any[]): Promise<any> {
+    await this.guestModel.deleteMany({
+      _id: { $in: ids.map(id => new Types.ObjectId(id)) }
+    }).exec();
+    await this.guestBetRecordModel.deleteMany({
+      user: { $in: ids.map(id => new Types.ObjectId(id)) }
+    }).exec();
+    await this.guestBorrowingRecordModel.deleteMany({
+      user: { $in: ids.map(id => new Types.ObjectId(id)) }
+    }).exec();
+    await this.tableGuestChipRecordModel.deleteMany({
+      user: { $in: ids.map(id => new Types.ObjectId(id)) }
+    }).exec();
+    await this.guestCurrencyModel.deleteMany({
+      user: { $in: ids.map(id => new Types.ObjectId(id)) }
+    }).exec();
+    await this.tableGuestSettlementRecordModel.deleteMany({
+      user: { $in: ids.map(id => new Types.ObjectId(id)) }
+    }).exec();
+  }
+  async findGuestUserStatistics(where?: any) {
+    let match: any = {};
+    let pipelineMatch: any = {};
+    if (!!where && !!where.account) {
+      const agent = await this.guestModel.findOne({
+        account: { $regex: eval(`/^${where.account}$/i`) },
+        level: game_agent_level
+      });
+      match = { $and: [] };
+      if (!!agent)
+        match.$and = [...match.$and, { $or: [{ account: { $regex: eval(`/^${where.account}$/i`) } }, { agent: agent._id }] }];
+      else
+        match.$and = [...match.$and, { account: { $regex: eval(`/^${where.account}$/i`) } }];
+    }
+    if (!!where && !isNaN(where.level)) {
+      if (where.level !== 3) {
+        if (!!match.$and)
+          match.$and = [...match.$and, { level: where.level }]
+        else match.$and = [{ level: where.level }];
+      } else {
+        if (!!match.$and)
+          match.$and = [...match.$and, { agent: { $exists: 0 } }, { level: game_member_level }]
+        else match.$and = [{ agent: { $exists: 0 } }, { level: game_member_level }];
+      }
+    }
+    if (!!where && !isNaN(where.status)) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { status: where.status }]
+      else match.$and = [{ status: where.status }];
+    }
+    if (!!where && !!where.scopeTimeDate) {
+      pipelineMatch = { createTimeDate: {
+          $gte: new Date(where.scopeTimeDate[0]),
+          $lte: new Date(where.scopeTimeDate[1])
+        }}
+    }
+    let pipeline: any[] = [
+      { $match: match},
+      {
+        $lookup: {
+          from: 'guest_currency',
+          localField: '_id',
+          foreignField: 'user',
+          as: 'currency'
+        }
+      },
+      {
+        $lookup: {
+          from: 'guest_chip_record',
+          localField: '_id',
+          foreignField: 'user',
+          pipeline: [
+            {
+              $group: {
+                _id: { type: '$type' },
+                value: { $sum: '$money' },
+              }
+            }
+          ],
+          as : 'totalChip'
+        }
+      }
+    ];
+    const sqa = match.$and ? match.$and.findIndex(item => item.level === 1) : -1;
+    if (sqa !== -1) pipeline = [...pipeline, {
+      $lookup: {
+        from: 'guest',
+        localField: '_id',
+        foreignField: 'agent',
+        pipeline: [
+          ...pipeline.filter(val => {
+            return !val.$match;
+          }), { $project: {
+              _id: 1, account: 0, password: 0, realName: 0, phone: 0,
+              level: 0, agent: 0, status: 0, description: 0,
+              createTimeDate: 0, modifyTimeDate: 0
+            }
+          }],
+        as: 'team'
+      }
+    }
+    ];
+    return await this.guestModel
       .aggregate(pipeline)
       .exec().then(async rs => {
         const statistical: any = {
@@ -387,7 +710,7 @@ export class AppService {
           totalWin: 0, outChip: 0, intoChip: 0,
           totalWinCash: 0, totalWinChip: 0,
           washCode: 0, washCodeCost: 0,
-          shareEarnings: 0, companyEarnings: 0,
+          earnings: 0, companyEarnings: 0,
           notSettleWashCode: 0, washCodeBalance: 0
         }
         for (let i = 0; i < Object.keys(GAME_NAME).length; ++i) {
@@ -396,111 +719,145 @@ export class AppService {
           statistical[`${game}Lose`] = 0;
           statistical[`${game}Water`] = 0;
         }
-        const list = rs.map(val => {
-          for (let i = 0; i < Object.keys(GAME_NAME).length; ++i) {
-            let game: string = Object.keys(GAME_NAME)[i];
+
+        for (let i = 0; i < rs.length; ++i) {
+          let val: any = rs[i];
+          for (let j = 0; j < Object.keys(GAME_NAME).length; ++j) {
+            let game: string = Object.keys(GAME_NAME)[j];
             val[`${game}Win`] = 0;
             val[`${game}Lose`] = 0;
             val[`${game}Water`] = 0;
           }
           if (val.level === 1) {
-            // 初始化属性
-            val.chip = 0; val.borrowing = 0;
-            val.totalBet = 0; val.validBet = 0;
-            val.totalWin = 0;val.outChip = 0; val.intoChip = 0;
-            val.totalWinCash = 0; val.totalWinChip = 0;
-            val.washCode = 0; val.washCodeCost = 0;
-            val.shareEarnings = 0; val.companyEarnings = 0;
-            val.notSettleWashCode = 0; val.washCodeBalance = 0;
-
-            for (let n = 0; n < val.team.length; ++n) {
-              let member: any = val.team[n];
-
-              let info = this.toGuestMemberStructure(member);
-              let earnings = info.totalWin - info.washCodeCost;
-              info.shareEarnings = Math.abs(earnings) * val.share;
-              // info.companyEarnings = earnings - info.shareEarnings;
-              if (earnings > 0) {
-                val.shareEarnings = 0 - val.shareEarnings;
-                // val.companyEarnings = 0 - val.companyEarnings;
+            let team = val.team || [];
+            if (sqa === -1) {
+              team = [];
+              for (let j = 0; j < rs.length; ++j) {
+                if ((rs[j].agent || "").toString() === val._id.toString())
+                  team = [...team, rs[j]];
               }
-              let keys: string[] = Object.keys(info);
-              for (let i = 0; i < keys.length; ++i)
-                val[keys[i]] += info[keys[i]];
             }
-            delete val.team;
-            val.shareEarnings /= 100;
-            // val.companyEarnings /= 100;
-            statistical.shareEarnings += val.shareEarnings;
-            // statistical.companyEarnings += val.companyEarnings;
+            let totalWin: number = 0;
+            let washCodeCost: number = 0;
+            for (let j = 0; j < team.length; ++j) {
+              let member: any = team[j];
+              member.betRecords = /*await this.guestBetRecordModel.find({
+                ...pipelineMatch, ...{ user: member._id }
+              })*/await this.guestBetRecordModel.aggregate([
+                { $match: {...pipelineMatch, ...{ user: member._id }} },
+                { $project: {
+                    game: 1, type: 1, washCode: 1, washCodeCost: 1,
+                    userBetMoney: 1, settlementMoney: 1
+                  }}
+              ]) || [];
 
-          } else {
-            const info = this.toGuestMemberStructure(val);
-            const keys: string[] = Object.keys(statistical);
-            for (let i = 0; i < keys.length; ++i) {
-              if (!info[keys[i]]) continue;
-              statistical[keys[i]] += info[keys[i]];
+              let structure = this.toGuestMemberStructure(member);
+              let keys: string[] = Object.keys(structure);
+              console.log("structure: ", structure);
+              for (let k = 0; k < keys.length; ++k) {
+                if (!!isNaN(structure[keys[k]])) continue;
+                if (keys[k] === 'totalWin')
+                  totalWin += structure[keys[k]];
+                else if (keys[k] === 'washCodeCost')
+                  washCodeCost += structure[keys[k]];
+                else {
+                  if (sqa !== -1) {
+                    if (keys[k] === 'totalWinCash' || keys[k] === 'totalWinChip')
+                      statistical[keys[k]] += structure[keys[k]] > 0 ? 0 - structure[keys[k]] : Math.abs(structure[keys[k]]);
+                    else statistical[keys[k]] += structure[keys[k]];
+                  }
+                }
+              }
+              delete member.betRecords;
             }
-            val = { ...val, ...this.toGuestMemberStructure(val) };
+            totalWin = totalWin > 0 ? 0 - totalWin : Math.abs(totalWin);
+            let earnings = totalWin - washCodeCost;
+            // statistical.washCodeCost += washCodeCost;
+            statistical.earnings += earnings * val.profitRate;
+            if (sqa !== -1) statistical.totalWin += totalWin;
+          } else {
+            val.betRecords = /*await this.guestBetRecordModel.find({
+              ...pipelineMatch, ...{ user: val._id }
+            })*/await this.guestBetRecordModel.aggregate([
+              { $match: {...pipelineMatch, ...{ user: val._id }} },
+              { $project: {
+                  game: 1, type: 1, washCode: 1, washCodeCost: 1,
+                  userBetMoney: 1, settlementMoney: 1
+                }}
+            ]) || [];
+
+            const structure = this.toGuestMemberStructure(val);
+            for (let j = 0; j < Object.keys(GAME_NAME).length; ++j) {
+              let game: string = Object.keys(GAME_NAME)[j];
+              structure[`${game}Water`] = structure[`${game}Lose`] - structure[`${game}Win`];
+            }
+            const keys: string[] = Object.keys(structure);
+            for (let j = 0; j < keys.length; ++j) {
+              if (!structure[keys[j]]) continue;
+              if (keys[j] === 'totalWinCash' || keys[j] === 'totalWinChip' || keys[j] === 'totalWin')
+                statistical[keys[j]] += structure[keys[j]] > 0 ? 0 - structure[keys[j]] : Math.abs(structure[keys[j]]);
+              else
+                statistical[keys[j]] += structure[keys[j]];
+            }
+            val = { ...val, ...structure };
           }
-          delete val.betSum;
-          delete val.currency;
-          delete val.totalChip;
-          delete val.totalSettle;
-          delete val.totalBetSum;
-          delete val.gameTotalWin;
-          delete val.gameTotalLose;
-          return val;
-        });
-        let earnings = statistical.totalWin - statistical.washCodeCost;
-        statistical.companyEarnings = Math.abs(earnings) - Math.abs(statistical.shareEarnings);
-        if (earnings > 0) statistical.companyEarnings = 0 - statistical.companyEarnings;
-        return {
-          statistical: statistical,
-          total: await this.tableGuestModel.count().where(match),
-          list: list
         }
+        // statistical.totalWin = statistical.totalWinChip + statistical.totalWinCash;
+        statistical.washCodeCost = parseFloat(statistical.washCodeCost.toFixed(2));
+        statistical.washCodeBalance = parseFloat(statistical.washCodeBalance.toFixed(2));
+
+        statistical.earnings /= 100;
+        let earnings = (statistical.totalWin * game_gold_multiple) - (statistical.washCodeCost * game_gold_multiple);
+        statistical.companyEarnings = Math.abs(earnings) - Math.abs(statistical.earnings * game_gold_multiple);
+        if (earnings < 0) statistical.companyEarnings = 0 - statistical.companyEarnings;
+        statistical.companyEarnings /= game_gold_multiple;
+
+        return statistical;
       });
   }
-  async findGuestUserOne(where: any): Promise<any> {
-    return this.tableGuestModel
-      .findOne(where)
+
+  async findSuperLoginTokenOne(where: any): Promise<any> {
+    return this.superLoginTokenModel
+      .findOne(where || {})
       .exec();
   }
-  async createGuestUser(arr: any[]): Promise<any> {
-    return await this.tableGuestModel.create(arr.map(val => {
-      val.createTimeDate = new Date();
-      val.modifyTimeDate = new Date();
-      return val;
-    }));
+  async createSuperLoginToken(arr: any[]): Promise<any> {
+    return this.superLoginTokenModel.create(arr);
   }
-  async updateGuestUser(params: any, where?: any): Promise<any> {
-    return this.tableGuestModel
+  async updateSuperLoginToken(params: any, where: any): Promise<any> {
+    return this.superLoginTokenModel
       .updateMany(params)
       .where(where)
       .exec();
   }
-  async deleteGuestUser(ids: any[]): Promise<any> {
-    return await this.tableGuestModel.deleteMany({
-      _id: { $in: ids.map(id => new Types.ObjectId(id)) }
-    }).exec();
+  async deleteSuperLoginToken(where?: any): Promise<any> {
+    return this.superLoginTokenModel
+      .deleteMany(where || {})
+      .exec();
   }
 
   async findGuestCurrencyOne(where: any): Promise<any> {
-    return this.tableGuestCurrencyModel
+    return this.guestCurrencyModel
       .findOne(where || {})
       .exec().then(rs => {
-        if (!rs) return { chip: 0, borrowing: 0 };
+        if (!rs) return {
+          chip: 0,
+          borrowing: 0,
+          washCode: 0,
+          washCodeCost: 0
+        };
         if (!rs.chip) rs.chip = 0;
         if (!rs.borrowing) rs.borrowing = 0;
+        if (!rs.washCode) rs.washCode = 0;
+        if (!rs.washCodeCost) rs.washCodeCost = 0;
         return rs;
       });
   }
   async updateGuestCurrency(params: any, where?: any): Promise<any> {
-    return this.tableGuestCurrencyModel
+    return this.guestCurrencyModel
       .updateMany(params)
       .where(where || {})
-      .setOptions({upsert: true})
+      .setOptions({ upsert: true })
       .exec();
   }
 
@@ -528,8 +885,8 @@ export class AppService {
     }
     if (!!where && !!where.account) {
       if (!!match.$and)
-        match.$and = [...match.$and, { 'user.account': where.account }]
-      else match.$and = [{ 'user.account': where.account }];
+        match.$and = [...match.$and, { 'user.account': { $regex: eval(`/^${where.account}$/i`) } }]
+      else match.$and = [{ 'user.account': { $regex: eval(`/^${where.account}$/i`) } }];
     }
     if (!!where && !!where.scopeTimeDate) {
       if (!!match.$and)
@@ -542,6 +899,7 @@ export class AppService {
           $lte: new Date(where.scopeTimeDate[1])
         }}];
     }
+    console.log("match: ", match.$and);
     let pipeline: any[] = [
       {
         $lookup: {
@@ -553,72 +911,58 @@ export class AppService {
       },
       {
         $lookup: {
-          from: 'table_guest',
+          from: 'guest',
           localField: 'user',
           foreignField: '_id',
           pipeline: [
-            { $project: { _id: false, account: true }}
+            { $project: { _id: 1, account: 1, xmRate: 1 }}
           ],
           as : 'user',
         }
       },
       { $match: match },
-      { $sort: { _id: -1 } }
+      { $sort: { createTimeDate: 1 } }
     ];
-    if (!!offset) pipeline = [...pipeline, { $skip: offset }]
-    if (!!limit) pipeline = [...pipeline, { $limit: limit }]
-    return this.bettingRecordModel.aggregate(pipeline).exec().then(async rs => {
-      let statistical: any = {
-        totalWin: 0, totalBet: 0, totalWinCash: 0, totalWinChip: 0,
-        washCode: 0, washCodeCost: 0
+    let countPipeline = [...[], ...pipeline, { $count: 'count' }];
+    if (!!offset) pipeline = [...pipeline, { $skip: offset }];
+    if (!!limit) pipeline = [...pipeline, { $limit: limit }];
+    return this.guestBetRecordModel.aggregate([{
+      $facet: {
+        list: pipeline,
+        total: countPipeline,
       }
-
-      let list = rs.map(val => {
-        val.user = val.user[0] || null!;
-        val.table = val.table[0] || null!;
-
-        statistical.totalBet += val.userBetMoney;
-        statistical.washCode += val.washCode * game_gold_multiple;
-        statistical.washCodeCost += val.washCodeCost * game_gold_multiple;
-
-        if (val.type === GAME_MONEY_TYPE.CASH)
-          statistical.totalWinCash += val.settlementMoney;
-        if (val.type === GAME_MONEY_TYPE.CHIP)
-          statistical.totalWinChip += val.settlementMoney;
-        return  val;
-      });
-      statistical.washCode /= game_gold_multiple;
-      statistical.washCodeCost /= game_gold_multiple;
-      statistical.totalWin = statistical.totalWinCash + statistical.totalWinChip;
+    }]).exec().then(async rs => {
+      console.log("rs: ", rs);
+      // rs = !!rs[0] ? rs : [{ list: [], total: [] }];
       return {
-        statistical: statistical, list: list,
-        total: await this.bettingRecordModel.count(match).exec()
+        list: rs[0].list.map(val => {
+          val.user = val.user[0] || null!;
+          val.table = val.table[0] || null!;
+          return  val;
+        }) || [],
+        statistical: await this.findGuestBettingStatistics(where),
+        total: rs[0].total.length === 0 ? 0 : rs[0].total[0].count
       }
     });
   }
   async findGuestBettingRecordOne(where: any): Promise<any> {
-    return this.bettingRecordModel
+    return this.guestBetRecordModel
       .findOne(where)
       .populate('user')
       .populate('table')
       .exec();
   }
   async createGuestBettingRecord(arr: any[]): Promise<any> {
-    return await this.bettingRecordModel.create(arr.map(val => {
-      if (!val.createTimeDate) val.createTimeDate = new Date();
-      if (!val.modifyTimeDate) val.modifyTimeDate = new Date();
-      return val;
-    }))
+    return await this.guestBetRecordModel.create(arr);
   }
   async updateGuestBettingRecordOne(params: any, where: any): Promise<any> {
-    params.modifyTimeDate = new Date();
-    return await this.bettingRecordModel
+    return await this.guestBetRecordModel
       .updateOne(params)
       .where(where || {})
       .exec();
   }
   async updateGuestBettingRecordResult(tid: string, noRun: number, noActive: number, result: any): Promise<any> {
-    const records: any[] = await this.bettingRecordModel.find({
+    const records: any[] = await this.guestBetRecordModel.find({
       noRun, noActive,
       table: new Types.ObjectId(tid),
     }).populate('user').exec();
@@ -632,12 +976,23 @@ export class AppService {
         record.user.account === 'sk'
       )
 
-      if (Math.abs(settleResult.settlementMoney) >= 100)
-        record.washCode = Math.floor(Math.abs(settleResult.settlementMoney) / 100) * 100;
-      record.washCodeCost = (record.washCode * user.ratio) / game_gold_multiple;
+      let washCode: number = settleResult.washCode;
+      let washCodeCost: number = 0;
+      if (record.user.account !== 'sk')
+        washCodeCost = (washCode * user.xmRate) / game_gold_multiple;
 
-      console.log("产生洗码量: ", record.washCode);
-      console.log("产生洗码费: ", record.washCodeCost);
+      console.log("产生洗码量: ", washCode);
+      console.log("产生洗码费: ", washCodeCost);
+
+      await this.updateGuestCurrency({
+        $inc: {
+          washCode: washCode - record.washCode,
+          washCodeCost: washCodeCost - record.washCodeCost,
+        }
+      }, { user: user._id });
+
+      record.washCode = washCode;
+      record.washCodeCost = washCodeCost;
 
       for (let k in settleResult)
         records[i][k] = settleResult[k];
@@ -683,10 +1038,10 @@ export class AppService {
           $lte: new Date(where.scopeTimeDate[1])
         }}];
     }
-    return this.bettingRecordModel.aggregate([
+    return this.guestBetRecordModel.aggregate([
       {
         $lookup: {
-          from: 'table_guest',
+          from: 'guest',
           localField: 'user',
           foreignField: '_id',
           as: 'user'
@@ -734,15 +1089,142 @@ export class AppService {
       return obj;
     })
   }
+  async deleteGuestBettingRecord(ids: string[]): Promise<any> {
+    let records = await this.guestBetRecordModel.find({
+      _id: { $in: ids.map(id => new Types.ObjectId(id)) }
+    }).exec();
+    let ms = [];
+    for (let i = 0; i < records.length; ++i) {
+      const record = records[i];
+      const washCode = record.washCode;
+      const washCodeCost = record.washCodeCost;
+      await this.updateGuestCurrency({
+        $inc: { washCode: -washCode, washCodeCost: -washCodeCost }
+      }, { user: record.user });
+      ms = [...ms, {
+        game: record.game, table: record.table,
+        noRun: record.noRun, noActive: record.noActive,
+        oldType: record.type, oldUser: record.user,
+        oldResult: record.result,
+        oldUserBetData: record.userBetData,
+        oldUserBetMoney: record.userBetMoney,
+        oldSettlementData: record.settlementData,
+        oldSettlementMoney: record.settlementMoney,
+      }]
+      await record.deleteOne();
+    }
+    await this.createGuestBetModifyRecord(ms);
+    return ;
+  }
+
+  async findGuestBetModifyRecord(offset: number, limit: number, where?: any): Promise<any> {
+    let match: any = { };
+    if (!!where && !!where.game) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { game: where.game }]
+      else match.$and = [{ game: where.game }];
+    }
+    if (!!where && !isNaN(where.noRun)) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { noRun: where.noRun }]
+      else match.$and = [{ noRun: where.noRun }];
+    }
+    if (!!where && !isNaN(where.noActive)) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { noActive: where.noActive }]
+      else match.$and = [{ noActive: where.noActive }];
+    }
+    if (!!where && !isNaN(where.tableNum)) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { 'table.tableNum': where.tableNum }]
+      else match.$and = [{ 'table.tableNum': where.tableNum }];
+    }
+    if (!!where && !!where.account) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { 'user.account': { $regex: eval(`/^${where.account}$/i`) } }]
+      else match.$and = [{ 'user.account': { $regex: eval(`/^${where.account}$/i`) } }];
+    }
+    if (!!where && !!where.scopeTimeDate) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { createTimeDate: {
+            $gte: new Date(where.scopeTimeDate[0]),
+            $lte: new Date(where.scopeTimeDate[1])
+          }}]
+      else match.$and = [{ createTimeDate: {
+          $gte: new Date(where.scopeTimeDate[0]),
+          $lte: new Date(where.scopeTimeDate[1])
+        }}];
+    }
+    let pipeline: any[] = [
+      {
+        $lookup: {
+          from: 'table',
+          localField: 'table',
+          foreignField: '_id',
+          as: 'table'
+        }
+      },
+      {
+        $lookup: {
+          from: 'guest',
+          localField: 'oldUser',
+          foreignField: '_id',
+          pipeline: [
+            { $project: { _id: 1, account: 1, xmRate: 1 }}
+          ],
+          as : 'oldUser',
+        }
+      },
+      {
+        $lookup: {
+          from: 'guest',
+          localField: 'newUser',
+          foreignField: '_id',
+          pipeline: [
+            { $project: { _id: 1, account: 1, xmRate: 1 }}
+          ],
+          as : 'newUser',
+        }
+      },
+      { $match: match },
+      { $sort: { createTimeDate: 1 } }
+    ];
+    let countPipeline = [...[], ...pipeline, { $count: 'count' }];
+    if (!!offset) pipeline = [...pipeline, { $skip: offset }];
+    if (!!limit) pipeline = [...pipeline, { $limit: limit }];
+    return this.guestBetModifyRecordModel.aggregate([{
+      $facet: {
+        list: pipeline,
+        total: countPipeline,
+      }
+    }]).exec().then(async rs => {
+      console.log("rs: ", rs);
+      return {
+        list: rs[0].list.map(val => {
+          val.table = val.table ? val.table[0] : null!;
+          val.oldUser = val.oldUser ? val.oldUser[0] :  null!;
+          val.newUser = val.newUser ? val.newUser[0] :  null!;
+          return  val;
+        }) || [],
+        total: rs[0].total.length === 0 ? 0 : rs[0].total[0].count
+      }
+    });
+  }
+  async createGuestBetModifyRecord(arr: any[]): Promise<any> {
+    return await this.guestBetModifyRecordModel.create(arr.map(val => {
+      if (!val.createTimeDate) val.createTimeDate = new Date();
+      return val;
+    }))
+  }
 
   async findGuestBorrowingRecord(offset: number, limit: number, where?: any): Promise<any> {
     let match: any = {};
     if (!!where && !!where.account) {
-      const user = await this.tableGuestModel.findOne({
-        account: where.account
+      const user = await this.guestModel.findOne({
+        account: { $regex: eval(`/^${where.account}$/i`) }
       });
-      if (!user) return [];
-      match = { $and: [ { account: where.account } ] }
+      if (!user) return { total: 0, list: [] };
+      match = { $and: [ { 'user.account': { $regex: eval(`/^${where.account}$/i`) } } ] }
     }
 
     if (!!where && !isNaN(where.type) && where.type !== 0) {
@@ -765,7 +1247,7 @@ export class AppService {
     let pipeline: any[] = [
       {
         $lookup: {
-          from: 'table_guest',
+          from: 'guest',
           localField: 'user',
           foreignField: '_id',
           as: 'user'
@@ -776,12 +1258,12 @@ export class AppService {
     ];
     if (!!offset) pipeline = [...pipeline, { $skip: offset }]
     if (!!limit) pipeline = [...pipeline, { $limit: limit }]
-    return await this.tableGuestBorrowingModel
+    return await this.guestBorrowingRecordModel
       .aggregate(pipeline)
       .exec()
       .then(async rs => {
         return {
-          total: await this.tableGuestBorrowingModel.count().where(match).exec(),
+          total: await this.guestBorrowingRecordModel.count().where(match).exec(),
           list: rs.map( val => {
             val.user = val.user[0] || null;
             return val;
@@ -790,17 +1272,17 @@ export class AppService {
       });
   }
   async createGuestBorrowingRecord(arr: any[]): Promise<any> {
-    return await this.tableGuestBorrowingModel.create(arr);
+    return await this.guestBorrowingRecordModel.create(arr);
   }
 
   async findGuestChipRecord(offset: number, limit: number, where?: any): Promise<any> {
     let match: any = {};
     if (!!where && !!where.account) {
-      const user = await this.tableGuestModel.findOne({
-        account: where.account
+      const user = await this.guestModel.findOne({
+        account: { $regex: eval(`/^${where.account}$/i`) }
       });
-      if (!user) return [];
-      match = { $and: [ { 'user.account': where.account } ] }
+      if (!user) return {total: 0, list: []};
+      match = { $and: [ { 'user.account': { $regex: eval(`/^${where.account}$/i`) } } ] }
     }
 
     if (!!where && !isNaN(where.type) && where.type !== 0) {
@@ -822,7 +1304,7 @@ export class AppService {
     let pipeline: any[] = [
       {
         $lookup: {
-          from: 'table_guest',
+          from: 'guest',
           localField: 'user',
           foreignField: '_id',
           as: 'user'
@@ -846,11 +1328,11 @@ export class AppService {
       });
   }
   async findGuestChipRecordOne(where: any): Promise<any> {
-    return this.tableGuestModel.aggregate([
+    return this.guestModel.aggregate([
       { $match: where },
       {
         $lookup: {
-          from: 'table_guest_chip_record',
+          from: 'guest_chip_record',
           localField: '_id',
           foreignField: 'user',
           pipeline: [
@@ -883,12 +1365,12 @@ export class AppService {
   }
 
   async findGuestUserSettlementRecordOne(match?: any): Promise<any> {
-    return this.tableGuestModel.aggregate([
+    return this.guestModel.aggregate([
       { $match: match },
       // 全部洗码
       {
         $lookup: {
-          from: 'table_guest_betting',
+          from: 'guest_betting_record',
           localField: '_id',
           foreignField: 'user',
           pipeline: [
@@ -907,7 +1389,7 @@ export class AppService {
       // 已结算洗码
       {
         $lookup: {
-          from: 'table_guest_settlement',
+          from: 'guest_settlement_record',
           localField: '_id',
           foreignField: 'user',
           pipeline: [
@@ -927,7 +1409,7 @@ export class AppService {
       const allWashCodeInfo = rs[0].allWashCodeInfo[0];
       const settleWashCodeInfo = rs[0].settleWashCodeInfo[0];
       return {
-        ratio: rs[0].ratio,
+        xmRate: rs[0].xmRate,
         allWashCode: allWashCodeInfo ? allWashCodeInfo.washCode : 0,
         allWashCodeCost: allWashCodeInfo ? allWashCodeInfo.washCodeCost : 0,
         settleWashCode: settleWashCodeInfo ? settleWashCodeInfo.washCode : 0,
@@ -936,9 +1418,8 @@ export class AppService {
     })
   }
   async createGuestUserSettlement(arr): Promise<any> {
-    return await this.tableGuestSettlementModel.create(arr.map(val => {
+    return await this.tableGuestSettlementRecordModel.create(arr.map(val => {
       val.createTimeDate = new Date();
-      val.modifyTimeDate = new Date();
       return val;
     }));
   }
@@ -946,12 +1427,12 @@ export class AppService {
   async findGuestUserSettlementRecord(offset: number, limit: number, where?: any): Promise<any> {
     let match: any = {};
     if (!!where && !!where.account) {
-      const user = await this.tableGuestModel.findOne({
-        account: where.account
+      const user = await this.guestModel.findOne({
+        account: { $regex: eval(`/^${where.account}$/i`) }
       });
       if (!user) return [];
       match = {
-        $and: [ { account: where.account } ]
+        $and: [ { 'user.account': { $regex: eval(`/^${where.account}$/i`) } } ]
       }
     }
     if (!!where && !!where.scopeTimeDate) {
@@ -968,7 +1449,7 @@ export class AppService {
     let pipeline: any[] = [
       {
         $lookup: {
-          from: 'table_guest',
+          from: 'guest',
           localField: 'user',
           foreignField: '_id',
           as: 'user'
@@ -979,7 +1460,7 @@ export class AppService {
     ];
     if (!!offset) pipeline = [...pipeline, { $skip: offset }]
     if (!!limit) pipeline = [...pipeline, { $limit: limit }]
-    return this.tableGuestSettlementModel
+    return this.tableGuestSettlementRecordModel
       .aggregate(pipeline)
       .exec().then(async rs => {
         return {
@@ -987,7 +1468,7 @@ export class AppService {
             val.user = val.user[0];
             return val;
           }),
-          total: await this.tableGuestSettlementModel.count(match),
+          total: await this.tableGuestSettlementRecordModel.count(match),
         }
       });
   }
@@ -1115,12 +1596,10 @@ export class AppService {
   async createAdminUser(arr: any[]): Promise<any> {
     return this.adminUserModel.create(arr.map(val => {
       val.createTimeDate = new Date();
-      val.modifyTimeDate = new Date();
       return val;
     }));
   }
   async updateAdminUser(params: any, where?: any): Promise<any> {
-    params.modifyTimeDate = new Date();
     return this.adminUserModel
       .updateMany(params)
       .where(where || {})
@@ -1151,7 +1630,6 @@ export class AppService {
     return this.adminMenuModel
       .create(arr.map(val => {
         val.createTimeDate = new Date();
-        val.modifyTimeDate = new Date();
         return val;
       }));
   }
@@ -1184,7 +1662,6 @@ export class AppService {
   async createAdminPermission(arr: any[]): Promise<any> {
     return await this.adminPermissionModel.create(arr.map(val => {
       val.createTimeDate = new Date();
-      val.modifyTimeDate = new Date();
       return val;
     }));
   }
@@ -1314,7 +1791,6 @@ export class AppService {
   async createAdminRoleMenu(arr: any[]): Promise<any> {
     return await this.adminRoleMenuModel.create(arr.map(val => {
       val.createTimeDate = new Date();
-      val.modifyTimeDate = new Date();
       return val;
     }));
   }
@@ -1330,7 +1806,6 @@ export class AppService {
   async createAdminRolePermission(arr: any[]): Promise<any> {
     return await this.adminRolePermissionModel.create(arr.map(val => {
       val.createTimeDate = new Date();
-      val.modifyTimeDate = new Date();
       return val;
     }));
   }
@@ -1346,7 +1821,6 @@ export class AppService {
   async createAdminUserRole(arr: any[]): Promise<any> {
     return await this.adminUserRoleModel.create(arr.map(val => {
       val.createTimeDate = new Date();
-      val.modifyTimeDate = new Date();
       return val;
     }));
   }
@@ -1359,6 +1833,14 @@ export class AppService {
     }).exec();
   }
 
+  /** @description 添加投注订单 */
+  public async addBettingBill(
+    tid: string, game: string, result: any,
+    noRun: number, noActive: number, bills: any[],
+    session?: any
+  ): Promise<any> {
+
+  }
   /** @description 计算结果 */
   calculateResult(result: any, data: any, isSanKe?: boolean) {
     let userBetMoney: number = 0;
@@ -1367,6 +1849,7 @@ export class AppService {
     let settlementMoney: number = 0;
 
     let water: number = 0.00;
+    let washCode: number = 0.00;
 
     const area: string[] = ['banker', 'player', 'dragon', 'tiger'];
     for (let k in data) {
@@ -1382,7 +1865,6 @@ export class AppService {
       }
       data[k] = parseInt(data[k]);
       userBetMoney += data[k];
-
       if (!!result.tie && area.indexOf(k) !== -1)
         continue;
 
@@ -1397,30 +1879,38 @@ export class AppService {
           let sk: number = (data[k] * (game_area_multiple_sk[k] * game_gold_multiple)) / game_gold_multiple;
           let member: number = (data[k] * (game_area_multiple[k] * game_gold_multiple)) / game_gold_multiple;
 
+          let tempWater: number = 0;
           let money: number = data[k] < 100 ? sk : member;
-          let ratio: number = 0;
           if (data[k] >= 100 && sk - member !== 0) {
             let smallMoney: number = data[k] - (Math.floor(data[k] / 100) * 100);
             let multiple: number = game_area_multiple[k] * game_gold_multiple;
-            let ratioAfterMoney = (data[k] - smallMoney) * multiple;
-            money = ratioAfterMoney / game_gold_multiple + smallMoney;
+            let afterMoney = (data[k] - smallMoney) * multiple;
+            money = afterMoney / game_gold_multiple + smallMoney;
+
+            tempWater = sk - money;
           }
-          water += ratio;
+          water += tempWater;
+          washCode += data[k] >= 100 ? Math.floor((data[k] - tempWater) / 100) * 100 : 0;
+
           settlementMoney += money;
           settlementData[k] = money;
         }
       } else {
         settlementMoney += -data[k];
         settlementData[k] = -data[k];
+        if (!isSanKe && data[k] >= 100)
+          washCode += Math.floor(data[k] / 100) * 100;
       }
     }
-    return { userBetMoney,  validBetMoney, settlementMoney, settlementData, water }
+    return { userBetMoney,  validBetMoney, settlementMoney, settlementData, water, washCode }
   }
   /** @description 重构会员 */
   toGuestMemberStructure(member: any): any {
     let info: any = {
       outChip: 0, intoChip: 0, totalWin: 0,
-      totalWinCash: 0, totalWinChip: 0
+      totalWinCash: 0, totalWinChip: 0,
+      washCode: 0, washCodeCost: 0,
+      totalBet: 0, validBet: 0,
     }
 
     for (let i = 0; i < Object.keys(GAME_NAME).length; ++i) {
@@ -1436,54 +1926,76 @@ export class AppService {
       if (member.totalChip[i]._id.type === GAME_CHIP_RECORD_TYPE.INTO)
         info.intoChip = member.totalChip[i].value || 0;
     }
-
-    let betSum = {
-      washCode: 0, washCodeCost: 0,
-      totalBet: 0, validBet: 0,
-      totalWinCash: 0, totalWinChip: 0
-    };
-    for (let i = 0; i < member.betSum.length; ++i) {
-      let item: any = member.betSum[i];
-      let keys: string[] = Object.keys(betSum);
-      for (let j = 0; j < keys.length; ++j) {
-        if (keys[j] === 'totalWinCash' || keys[j] === 'totalWinChip')
-          continue;
-        betSum[keys[j]] += item[keys[j]] || 0;
-      }
-      if (item._id.type === GAME_MONEY_TYPE.CASH)
-        betSum.totalWinCash += item.settlementMoney;
-      if (item._id.type === GAME_MONEY_TYPE.CHIP)
-        betSum.totalWinChip += item.settlementMoney;
+    for (let i = 0; i < member.betRecords.length; ++i) {
+      let record = member.betRecords[i];
+      info.washCode += record.washCode || 0;
+      info.washCodeCost += record.washCodeCost || 0;
+      info.totalBet += record.userBetMoney || 0;
+      info.validBet += record.validBetMoney || 0;
+      if (record.type === GAME_MONEY_TYPE.CASH)
+        info.totalWinCash += record.settlementMoney || 0;
+      if (record.type === GAME_MONEY_TYPE.CHIP)
+        info.totalWinChip += record.settlementMoney || 0;
+      if (record.settlementMoney > 0)
+        info[`${record.game}Win`] += Math.abs(record.settlementMoney) || 0;
+      else
+        info[`${record.game}Lose`] += Math.abs(record.settlementMoney) || 0;
+      info[`${record.game}Water`] += record.settlementMoney || 0;
     }
-    info = { ...info, ...betSum };
+
     info.totalWin = info.totalWinCash + info.totalWinChip;
-
-    for (let i = 0; i < member.gameTotalWin.length; ++i)
-      info[`${member.gameTotalWin[i]._id.game}Win`] = member.gameTotalWin[i].value;
-    for (let i = 0; i < member.gameTotalLose.length; ++i)
-      info[`${member.gameTotalLose[i]._id.game}Lose`] = member.gameTotalLose[i].value;
-
-    for (let i = 0; i < Object.keys(GAME_NAME).length; ++i) {
-      let game: string = Object.keys(GAME_NAME)[i];
-      info[`${game}Water`] = info[`${game}Win`] + info[`${game}Lose`];
-    }
-
-    const totalWashCode = member.totalBetSum[0] ? member.totalBetSum[0].washCode : 0;
-    const totalWashCodeCost = member.totalBetSum[0] ? member.totalBetSum[0].washCodeCost : 0;
-
-    const settleWashCode = member.totalSettle[0] ? member.totalSettle[0].washCode : 0;
-    const settleWashCodeCost = member.totalSettle[0] ? member.totalSettle[0].washCodeCost : 0;
-
-    info.notSettleWashCode = (totalWashCode * game_gold_multiple) - (settleWashCode * game_gold_multiple);
-    info.washCodeBalance = (totalWashCodeCost * game_gold_multiple) - (settleWashCodeCost * game_gold_multiple);
-
-    info.notSettleWashCode /= game_gold_multiple;
-    info.washCodeBalance /= game_gold_multiple;
 
     info.chip = member.currency[0] ? (member.currency[0].chip || 0) : 0;
     info.borrowing = member.currency[0] ? (member.currency[0].borrowing || 0) : 0;
-
+    info.notSettleWashCode = member.currency[0] ? (member.currency[0].washCode || 0) : 0;
+    info.washCodeBalance = member.currency[0] ? (member.currency[0].washCodeCost || 0) : 0;
     return info;
   }
 
+  /** @description 版本迭代更新 */
+  async versionUpdate(): Promise<any> {
+    let date: Date = new Date();
+    date.getFullYear();
+    date.getMonth();
+    await this.guestCurrencyModel.updateMany({
+      washCode: 0, washCodeCost: 0
+    }).where({}).exec();
+    for (let s = 0; s < 31; ++s) {
+      const records = await this.findGuestBettingRecord(null, null, {
+        scopeTimeDate: [
+          `${date.getFullYear()}-${date.getMonth() + 1}-${s < 10 ? `0${s}` : s} 00:00:00`,
+          `${date.getFullYear()}-${date.getMonth() + 1}-${s < 10 ? `0${s}` : s} 23:59:59`
+        ]
+      });
+      for (let i = 0; i < records.list.length; ++i) {
+        let record = records.list[i];
+        if (record.user.account === 'sk') continue;
+
+        const settleResult = this.calculateResult(
+          record.result, record.userBetData,
+          record.user.account === 'sk'
+        )
+
+        let washCode: number = settleResult.washCode;
+        let washCodeCost: number = 0;
+        if (record.user.account !== 'sk')
+          washCodeCost = (washCode * record.user.xmRate) / game_gold_multiple;
+
+        console.log("产生洗码量: ", washCode);
+        console.log("产生洗码费: ", washCodeCost);
+
+        await this.updateGuestCurrency({
+          $inc: {
+            washCode: washCode,
+            washCodeCost: washCodeCost
+          }
+        }, { user: record.user._id });
+
+        await this.updateGuestBettingRecordOne({
+          washCode, washCodeCost
+        }, { _id: record._id });
+      }
+    }
+
+  }
 }
