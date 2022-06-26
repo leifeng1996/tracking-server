@@ -34,8 +34,8 @@ import { GuestBetModifyRecord, GuestBetModifyRecordSchema } from './schemas/gues
       secret: '123456',
       signOptions: { expiresIn: '7200s' }
     }),
-    // MongooseModule.forRoot('mongodb://localhost:37017/tracking'),
-    MongooseModule.forRoot('mongodb://192.168.13.25:21001,192.168.13.25:21002, 192.168.13.25:21003/tracking'),
+    MongooseModule.forRoot('mongodb://localhost:37017/tracking'),
+    // MongooseModule.forRoot('mongodb://192.168.13.25:21001,192.168.13.25:21002, 192.168.13.25:21003/tracking'),
     MongooseModule.forFeature([
       { name: AdminUser.name, schema: AdminUserSchema },
       { name: Table.name, schema: TableSchema },

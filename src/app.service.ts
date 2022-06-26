@@ -1430,7 +1430,7 @@ export class AppService {
       const user = await this.guestModel.findOne({
         account: { $regex: eval(`/^${where.account}$/i`) }
       });
-      if (!user) return [];
+      if (!user) return { list: [], total: 0 };
       match = {
         $and: [ { 'user.account': { $regex: eval(`/^${where.account}$/i`) } } ]
       }
@@ -1950,52 +1950,5 @@ export class AppService {
     info.notSettleWashCode = member.currency[0] ? (member.currency[0].washCode || 0) : 0;
     info.washCodeBalance = member.currency[0] ? (member.currency[0].washCodeCost || 0) : 0;
     return info;
-  }
-
-  /** @description 版本迭代更新 */
-  async versionUpdate(): Promise<any> {
-    let date: Date = new Date();
-    date.getFullYear();
-    date.getMonth();
-    await this.guestCurrencyModel.updateMany({
-      washCode: 0, washCodeCost: 0
-    }).where({}).exec();
-    for (let s = 0; s < 31; ++s) {
-      const records = await this.findGuestBettingRecord(null, null, {
-        scopeTimeDate: [
-          `${date.getFullYear()}-${date.getMonth() + 1}-${s < 10 ? `0${s}` : s} 00:00:00`,
-          `${date.getFullYear()}-${date.getMonth() + 1}-${s < 10 ? `0${s}` : s} 23:59:59`
-        ]
-      });
-      for (let i = 0; i < records.list.length; ++i) {
-        let record = records.list[i];
-        if (record.user.account === 'sk') continue;
-
-        const settleResult = this.calculateResult(
-          record.result, record.userBetData,
-          record.user.account === 'sk'
-        )
-
-        let washCode: number = settleResult.washCode;
-        let washCodeCost: number = 0;
-        if (record.user.account !== 'sk')
-          washCodeCost = (washCode * record.user.xmRate) / game_gold_multiple;
-
-        console.log("产生洗码量: ", washCode);
-        console.log("产生洗码费: ", washCodeCost);
-
-        await this.updateGuestCurrency({
-          $inc: {
-            washCode: washCode,
-            washCodeCost: washCodeCost
-          }
-        }, { user: record.user._id });
-
-        await this.updateGuestBettingRecordOne({
-          washCode, washCodeCost
-        }, { _id: record._id });
-      }
-    }
-
   }
 }

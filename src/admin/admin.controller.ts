@@ -19,13 +19,6 @@ export class AdminController {
     private readonly appService: AppService,
   ) { }
 
-  /** @description 系统迭代数据接口 */
-  @Get('/versionUpdate')
-  private async washCodeToCurrency(): Promise<any> {
-    await this.appService.versionUpdate();
-    return { message: 'ok' }
-  }
-
   /** @description 登录后台系统 */
   @Post('/login')
   private async login(@Req() req): Promise<any> {
@@ -902,22 +895,29 @@ export class AdminController {
         let washCodeCost: number = 0;
         if (account !== 'sk')
           washCodeCost = (washCode * user.xmRate) / game_gold_multiple;
-        console.log("washCode: ", washCode);
-        console.log("washCodeCost: ", washCodeCost);
-        console.log("record.washCode: ", record.washCode);
-        console.log("record.washCodeCost: ", record.washCodeCost);
-        console.log("update: ", {
-          washCode: washCode - record.washCode,
-          washCodeCost: washCodeCost - record.washCodeCost,
-        })
 
-        await this.appService.updateGuestCurrency({
-          $inc: {
-            washCode: washCode - record.washCode,
-            washCodeCost: washCodeCost - record.washCodeCost,
-          }
-        }, { user: user._id });
+        if (!!params.user) {
+          await this.appService.updateGuestCurrency({
+            $inc: {
+              washCode: -record.washCode,
+              washCodeCost: -record.washCodeCost,
+            }
+          }, { user: record.user._id });
 
+          await this.appService.updateGuestCurrency({
+            $inc: {
+              washCode: washCode,
+              washCodeCost: washCodeCost,
+            }
+          }, { user: user._id });
+        } else {
+          await this.appService.updateGuestCurrency({
+            $inc: {
+              washCode: washCode - record.washCode,
+              washCodeCost: washCodeCost - record.washCodeCost,
+            }
+          }, { user: record.user._id });
+        }
 
         params = {...params, ...settleResult, ...{ washCodeCost }};
       }
