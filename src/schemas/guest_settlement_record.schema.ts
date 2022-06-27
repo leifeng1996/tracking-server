@@ -11,10 +11,8 @@ export class GuestSettlementRecord extends Document {
   washCodeCost: number;
   @Prop()
   description: string;
-  @Prop({ type: Date, default: new Date() })
+  @Prop()
   createTimeDate: Date;
-  @Prop({ type: Date, default: new Date() })
-  modifyTimeDate: Date;
 }
 
 export const GuestSettlementRecordSchema = SchemaFactory.createForClass(GuestSettlementRecord);

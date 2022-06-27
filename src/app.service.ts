@@ -594,6 +594,7 @@ export class AppService {
     }));
   }
   async updateGuestUser(params: any, where?: any): Promise<any> {
+    console.log("params: ", params);
     return this.guestModel
       .updateMany(params)
       .where(where)
@@ -1470,6 +1471,58 @@ export class AppService {
           }),
           total: await this.tableGuestSettlementRecordModel.count(match),
         }
+      });
+  }
+  async findGuestUserSettlementStatistics(where?: any): Promise<any> {
+    let match: any = {};
+    if (!!where && !!where.account) {
+      const user = await this.guestModel.findOne({
+        account: { $regex: eval(`/^${where.account}$/i`) }
+      });
+      if (!user) return { list: [], total: 0 };
+      match = {
+        $and: [ { 'user.account': { $regex: eval(`/^${where.account}$/i`) } } ]
+      }
+    }
+    if (!!where && !!where.scopeTimeDate) {
+      if (!!match.$and)
+        match.$and = [...match.$and, { createTimeDate: {
+            $gte: new Date(where.scopeTimeDate[0]),
+            $lte: new Date(where.scopeTimeDate[1])
+          }}]
+      else match.$and = [{ createTimeDate: {
+          $gte: new Date(where.scopeTimeDate[0]),
+          $lte: new Date(where.scopeTimeDate[1])
+        }}];
+    }
+    let pipeline: any[] = [
+      {
+        $lookup: {
+          from: 'guest',
+          localField: 'user',
+          foreignField: '_id',
+          as: 'user'
+        }
+      },
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalWashCode: { $sum: '$washCode' },
+          totalWashCodeCost: { $sum: '$washCodeCost' },
+        }
+      }
+    ];
+    return this.tableGuestSettlementRecordModel
+      .aggregate(pipeline)
+      .exec().then(async rs => {
+        console.log("rs: ", rs);
+        let statistics = { totalWashCode: 0, totalWashCodeCost: 0 }
+        for (let i = 0; i < rs.length; ++i) {
+          statistics.totalWashCode += rs[i].totalWashCode;
+          statistics.totalWashCodeCost += rs[i].totalWashCodeCost;
+        }
+        return statistics;
       });
   }
 

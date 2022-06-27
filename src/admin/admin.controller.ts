@@ -574,8 +574,10 @@ export class AdminController {
       xmRate, remark, status
     } = req.body;
     let params: any = { realName, phone, remark, status };
-    if (level === 1) params.profitRate = profitRate;
-    else if (level === 2) params.xmRate = xmRate;
+    if (level === 1 && !isNaN(params.profitRate))
+      params.profitRate = profitRate;
+    else if (level === 2 && !isNaN(params.xmRate))
+      params.xmRate = xmRate;
     if (!!password && password.length >= 6)
       params.password = Encrypt.md5(password).toLocaleUpperCase();
 
@@ -1006,7 +1008,8 @@ export class AdminController {
     if (currency.washCodeCost < money) throw new HttpException({
       errCode: -1, message: '洗码费余额不足'
     }, HttpStatus.OK);
-    const settleCode = parseFloat((money / (user.xmRate / game_xm_multiple)).toFixed(2));
+
+    const settleCode = money / (user.xmRate / game_xm_multiple);
     currency.washCode -= settleCode;
     currency.washCodeCost -= money;
     await this.appService.updateGuestCurrency({
@@ -1054,4 +1057,10 @@ export class AdminController {
     );
   }
 
+  @UseGuards(AuthGuard('jwt'))
+  @Post('/guest/user/settlement/statistics')
+  async getGuestUserSettlementStatistics(@Req() req): Promise<any> {
+    const { where } = req.body;
+    return this.appService.findGuestUserSettlementStatistics(where);
+  }
 }

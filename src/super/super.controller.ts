@@ -191,7 +191,7 @@ export class SuperController {
     table.noRun += 1;
     await table.save();
 
-    return { message: 'ok' };
+    return { newNoRun: table.noRun };
   }
 
   /** @description 检查客人是否存在 */
